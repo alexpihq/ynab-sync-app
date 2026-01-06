@@ -113,7 +113,37 @@ function showDashboard() {
   document.getElementById('login-page').style.display = 'none';
   document.getElementById('dashboard-page').style.display = 'block';
   loadSyncStatus();
+  loadServerIP();
   setInterval(loadSyncStatus, 5000); // Refresh every 5 seconds
+}
+
+// Load server's outbound IP address
+async function loadServerIP() {
+  try {
+    const response = await fetch('/api/server-ip');
+    if (response.ok) {
+      const data = await response.json();
+      const ipElement = document.getElementById('server-ip');
+      if (ipElement) {
+        ipElement.textContent = data.ip || 'Unknown';
+        ipElement.style.color = '#2196F3';
+        ipElement.style.fontFamily = 'monospace';
+      }
+    } else {
+      const ipElement = document.getElementById('server-ip');
+      if (ipElement) {
+        ipElement.textContent = 'Unable to determine';
+        ipElement.style.color = '#f44336';
+      }
+    }
+  } catch (error) {
+    console.error('Failed to load server IP:', error);
+    const ipElement = document.getElementById('server-ip');
+    if (ipElement) {
+      ipElement.textContent = 'Error loading IP';
+      ipElement.style.color = '#f44336';
+    }
+  }
 }
 
 async function loadSyncStatus() {

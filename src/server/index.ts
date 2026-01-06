@@ -138,6 +138,67 @@ app.get('/api/config', (req, res) => {
   });
 });
 
+// Get server's outbound IP address
+app.get('/api/server-ip', async (req, res) => {
+  try {
+    // Try multiple IP services for reliability
+    const ipServices = [
+      'https://api.ipify.org?format=json',
+      'https://api64.ipify.org?format=json',
+      'https://ifconfig.me/ip',
+      'https://icanhazip.com'
+    ];
+
+    for (const serviceUrl of ipServices) {
+      try {
+        const response = await fetch(serviceUrl, {
+          method: 'GET',
+          headers: {
+            'User-Agent': 'YNAB-Sync-App/1.0'
+          },
+          signal: AbortSignal.timeout(5000) // 5 second timeout
+        });
+
+        if (response.ok) {
+          const text = await response.text();
+          
+          // Try to parse as JSON first
+          try {
+            const json = JSON.parse(text);
+            return res.json({ 
+              ip: json.ip || text.trim(),
+              source: serviceUrl,
+              timestamp: new Date().toISOString()
+            });
+          } catch {
+            // If not JSON, return as plain text
+            return res.json({ 
+              ip: text.trim(),
+              source: serviceUrl,
+              timestamp: new Date().toISOString()
+            });
+          }
+        }
+      } catch (error) {
+        logger.debug(`Failed to get IP from ${serviceUrl}:`, error);
+        continue; // Try next service
+      }
+    }
+
+    // If all services failed, return error
+    res.status(503).json({ 
+      error: 'Unable to determine server IP address',
+      message: 'All IP lookup services failed'
+    });
+  } catch (error) {
+    logger.error('Error getting server IP:', error);
+    res.status(500).json({ 
+      error: 'Internal server error',
+      message: String(error)
+    });
+  }
+});
+
 app.get('/api/sync/status', requireAuth, (req, res) => {
   res.json(syncState);
 });
