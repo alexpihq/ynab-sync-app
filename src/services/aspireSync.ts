@@ -71,6 +71,19 @@ export async function syncAspireToYnab(): Promise<{ created: number; updated: nu
     return { created: totalCreated, updated: totalUpdated, deleted: totalDeleted, skipped: totalSkipped, errors: 0 };
   } catch (error: any) {
     logger.error('Error syncing Aspire → YNAB:', error);
+    
+    // Если это Cloudflare Challenge, не считаем это критической ошибкой
+    const isCloudflareError = error.message && (
+      error.message.includes('Cloudflare Challenge') ||
+      error.message.includes('Just a moment')
+    );
+    
+    if (isCloudflareError) {
+      logger.warn('⚠️  Aspire sync skipped due to Cloudflare protection. This is temporary and will be retried on next sync.');
+      // Возвращаем успешный результат, но с ошибкой, чтобы показать в UI
+      return { created: totalCreated, updated: totalUpdated, deleted: totalDeleted, skipped: totalSkipped, errors: 1 };
+    }
+    
     return { created: 0, updated: 0, deleted: 0, skipped: 0, errors: 1 };
   }
 }
@@ -269,6 +282,19 @@ async function processAspireAccount(
 
     return { created, updated, deleted, skipped };
   } catch (error: any) {
+    // Проверяем, является ли это Cloudflare Challenge
+    const isCloudflareError = error.message && (
+      error.message.includes('Cloudflare Challenge') ||
+      error.message.includes('Just a moment') ||
+      error.message.includes('cf-challenge')
+    );
+    
+    if (isCloudflareError) {
+      logger.warn(`⚠️  Cloudflare Challenge detected for account ${aspireAccountId}. Skipping this account for now.`);
+      // Не бросаем ошибку дальше, просто возвращаем пустые результаты
+      return { created: 0, updated: 0, deleted: 0, skipped: 0 };
+    }
+    
     logger.error(`Error processing Aspire account ${aspireAccountId}:`, error);
     throw error;
   }
