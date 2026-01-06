@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>YNAB Sync Dashboard</title>
+  <link rel="stylesheet" href="/styles.css">
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body>
+  <div id="login-page" class="page">
+    <div class="login-container">
+      <h1>🔐 YNAB Sync</h1>
+      <form id="login-form">
+        <input type="email" id="email" placeholder="Email" required>
+        <input type="password" id="password" placeholder="Password" required>
+        <button type="submit">Login</button>
+        <div id="login-error" class="error"></div>
+      </form>
+      <p class="hint">Use your Supabase account credentials</p>
+    </div>
+  </div>
+
+  <div id="dashboard-page" class="page" style="display: none;">
+    <div class="dashboard">
+      <header>
+        <h1>📊 YNAB Sync Dashboard</h1>
+        <button id="logout-btn" class="logout-btn">Logout</button>
+      </header>
+
+      <div class="status-card">
+        <h2>Sync Status</h2>
+        <div id="sync-status">
+          <div class="status-badge" id="status-badge">Checking...</div>
+          <p id="last-run">Last run: Never</p>
+          <p id="sync-running" style="display: none;">⏳ Sync in progress...</p>
+        </div>
+      </div>
+
+      <div class="actions-card">
+        <h2>Actions</h2>
+        <div class="button-group">
+          <button class="sync-btn" onclick="runSync('all')">
+            🔄 Run All Syncs
+          </button>
+          <button class="sync-btn secondary" onclick="runSync('ynab')">
+            💰 YNAB ↔ YNAB
+          </button>
+          <button class="sync-btn secondary" onclick="runSync('finolog')">
+            💼 Finolog → YNAB
+          </button>
+          <button class="sync-btn secondary" onclick="runSync('aspire')">
+            🏦 Aspire → YNAB
+          </button>
+          <button class="sync-btn secondary" onclick="runSync('tron')">
+            ⛓️ Tron → YNAB
+          </button>
+        </div>
+      </div>
+
+      <div class="results-card">
+        <h2>Last Sync Results</h2>
+        <div id="sync-results">
+          <p class="no-data">No sync results yet</p>
+        </div>
+      </div>
+
+      <!-- Real-time Logs -->
+      <div id="sync-logs-container" class="logs-card" style="display: none;">
+        <div class="logs-header">
+          <h2>📋 Sync Logs (Real-time)</h2>
+          <button id="clear-logs-btn" class="clear-logs-btn">Clear</button>
+        </div>
+        <div id="sync-logs" class="logs-content"></div>
+      </div>
+
+      <div class="history-card">
+        <h2>Sync History</h2>
+        <div id="sync-history">
+          <p class="no-data">No history yet</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="/app.js?v=12"></script>
+</body>
+</html>
+

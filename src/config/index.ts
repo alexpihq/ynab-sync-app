@@ -1,0 +1,71 @@
+import dotenv from 'dotenv';
+import { AppConfig } from '../types/index.js';
+
+// Загружаем переменные окружения
+dotenv.config();
+
+function getEnvVar(key: string, required = true): string {
+  const value = process.env[key];
+  if (required && !value) {
+    throw new Error(`Missing required environment variable: ${key}`);
+  }
+  return value || '';
+}
+
+export const config: AppConfig = {
+  // YNAB
+  ynabToken: getEnvVar('YNAB_TOKEN'),
+  
+  // Finolog (optional)
+  finologApiToken: getEnvVar('FINOLOG_API_TOKEN', false),
+  
+  // Aspire Bank (optional)
+  aspireProxyUrl: getEnvVar('ASPIRE_PROXY_URL', false) || 'https://aspire-proxy-render.onrender.com',
+  
+  // Tron Blockchain (optional)
+  tronWalletAddress: getEnvVar('TRON_WALLET_ADDRESS', false) || '',
+  tronApiKey: getEnvVar('TRON_API_KEY', false) || '',
+  
+  // Supabase
+  supabaseUrl: getEnvVar('SUPABASE_URL'),
+  supabaseServiceKey: getEnvVar('SUPABASE_SERVICE_ROLE_KEY'),
+  
+  // Budget IDs
+  personalBudgetId: getEnvVar('PERSONAL_BUDGET_ID'),
+  innerlyBudgetId: getEnvVar('INNERLY_BUDGET_ID'),
+  vibeconBudgetId: getEnvVar('VIBECON_BUDGET_ID'),
+  
+  // Sync configuration
+  syncIntervalMinutes: parseInt(getEnvVar('SYNC_INTERVAL_MINUTES', false) || '5'),
+  logLevel: (getEnvVar('LOG_LEVEL', false) || 'info') as 'debug' | 'info' | 'warn' | 'error',
+  syncStartDate: getEnvVar('SYNC_START_DATE', false) || '2026-01-01',
+};
+
+// Константы для работы с бюджетами
+export const BUDGETS = {
+  PERSONAL: {
+    id: config.personalBudgetId,
+    name: 'Alex Personal',
+    type: 'personal' as const,
+    currency: 'EUR' as const,
+  },
+  INNERLY: {
+    id: config.innerlyBudgetId,
+    name: 'Innerly',
+    type: 'company' as const,
+    currency: 'USD' as const,
+  },
+  VIBECON: {
+    id: config.vibeconBudgetId,
+    name: 'Vibecon',
+    type: 'company' as const,
+    currency: 'USD' as const,
+  },
+} as const;
+
+// Список всех компаний для итерации
+export const COMPANIES = [BUDGETS.INNERLY, BUDGETS.VIBECON] as const;
+
+// API endpoints
+export const YNAB_API_BASE = 'https://api.ynab.com/v1';
+

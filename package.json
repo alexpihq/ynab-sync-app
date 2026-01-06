@@ -1,0 +1,43 @@
+{
+  "name": "ynab-sync-app",
+  "version": "2.0.0",
+  "description": "Unified YNAB synchronization application with web dashboard",
+  "main": "dist/server/index.js",
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/server/index.ts",
+    "build": "tsc",
+    "start": "tsx src/server/index.ts",
+    "sync-once": "tsx src/sync-once.ts",
+    "test-connection": "tsx src/test-connection.ts",
+    "test": "echo \"Tests not implemented yet\" && exit 0"
+  },
+  "keywords": [
+    "ynab",
+    "budget",
+    "sync",
+    "loan"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "@supabase/supabase-js": "^2.39.3",
+    "cors": "^2.8.5",
+    "date-fns": "^3.2.0",
+    "dotenv": "^16.4.1",
+    "express": "^5.2.1",
+    "express-session": "^1.18.2",
+    "node-cron": "^4.2.1"
+  },
+  "devDependencies": {
+    "@types/cors": "^2.8.19",
+    "@types/express": "^5.0.6",
+    "@types/express-session": "^1.18.2",
+    "@types/node": "^20.11.5",
+    "tsx": "^4.7.0",
+    "typescript": "^5.3.3"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
