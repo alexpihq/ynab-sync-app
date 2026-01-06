@@ -22,135 +22,199 @@ export interface AspireResponse {
   data: AspireTransaction[];
   metadata?: {
     total: number;
+    per_page?: number;
+    current_page?: number;
+    next_page_url?: string;
   };
 }
 
+// Кэш для токена
+interface TokenCache {
+  access_token: string | null;
+  expires_at: number | null;
+}
+
 class AspireService {
-  private proxyUrl: string;
+  // Закомментировано: использование прокси
+  // private proxyUrl: string;
+  private tokenCache: TokenCache = {
+    access_token: null,
+    expires_at: null
+  };
+  private readonly apiBaseUrl = 'https://api.aspireapp.com/public/v1';
 
   constructor() {
-    this.proxyUrl = config.aspireProxyUrl;
-    logger.info('Aspire Bank client initialized');
+    // Закомментировано: использование прокси
+    // this.proxyUrl = config.aspireProxyUrl;
+    logger.info('Aspire Bank client initialized (direct API access)');
   }
 
   /**
    * Проверяет, настроен ли Aspire клиент
    */
   isConfigured(): boolean {
-    return !!this.proxyUrl;
+    // Проверяем наличие credentials вместо proxy URL
+    return !!(config.aspireClientId && config.aspireClientSecret);
   }
 
   /**
-   * Проверяет, является ли ответ Cloudflare Challenge страницей
+   * Получает access token от Aspire API
    */
-  private isCloudflareChallenge(responseText: string): boolean {
-    return responseText.includes('Just a moment...') ||
-           responseText.includes('cf-challenge') ||
-           responseText.includes('challenge-platform') ||
-           responseText.includes('Enable JavaScript and cookies to continue');
+  private async getAccessToken(): Promise<string> {
+    // Проверяем, есть ли валидный токен в кэше
+    if (this.tokenCache.access_token && this.tokenCache.expires_at && Date.now() < this.tokenCache.expires_at) {
+      logger.debug('✅ Using cached Aspire access token');
+      return this.tokenCache.access_token;
+    }
+
+    try {
+      logger.info('🔄 Getting new Aspire access token...');
+      const response = await fetch(`${this.apiBaseUrl}/login`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          grant_type: 'client_credentials',
+          client_id: config.aspireClientId,
+          client_secret: config.aspireClientSecret
+        }),
+        signal: AbortSignal.timeout(10000) // 10 second timeout
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Failed to get access token: ${response.status} - ${errorText}`);
+      }
+
+      const data = await response.json();
+      
+      // Кэшируем токен с учетом времени жизни
+      const expiresIn = parseInt(data.expires_in) * 1000; // конвертируем в миллисекунды
+      this.tokenCache = {
+        access_token: data.access_token,
+        expires_at: Date.now() + expiresIn - 60000 // вычитаем 1 минуту для безопасности
+      };
+      
+      logger.info(`✅ Aspire token cached, expires in ${Math.round(expiresIn/1000)}s`);
+      return data.access_token;
+    } catch (error: any) {
+      logger.error('❌ Aspire Token Error:', error.message);
+      throw error;
+    }
   }
 
   /**
-   * Получает транзакции из Aspire Bank через прокси
+   * Получает одну страницу транзакций из Aspire API
+   */
+  private async fetchPage(accountId: string, startDate: string, page: number = 1): Promise<AspireResponse> {
+    const accessToken = await this.getAccessToken();
+    
+    const url = new URL(`${this.apiBaseUrl}/transactions`);
+    url.searchParams.set('account_id', accountId);
+    url.searchParams.set('start_date', startDate);
+    url.searchParams.set('page', page.toString());
+
+    logger.debug(`Fetching Aspire transactions page ${page} from: ${url.toString()}`);
+    
+    const response = await fetch(url.toString(), {
+      method: 'GET',
+      headers: {
+        'Authorization': `Bearer ${accessToken}`,
+        'Content-Type': 'application/json',
+        'Accept': 'application/json'
+      },
+      signal: AbortSignal.timeout(60000) // 60 second timeout
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      logger.error(`Aspire API returned ${response.status}: ${errorText.substring(0, 200)}...`);
+      throw new Error(`Aspire API error: ${response.status} - ${errorText.substring(0, 200)}`);
+    }
+
+    const data = await response.json() as AspireResponse;
+    return data;
+  }
+
+  /**
+   * Получает транзакции из Aspire Bank напрямую (без прокси)
    */
   async getTransactions(
     accountId: string,
     startDate: string,
-    retries = 3
+    retries = 2
   ): Promise<AspireTransaction[]> {
-    const url = `${this.proxyUrl}/aspire?account_id=${encodeURIComponent(accountId)}&start_date=${encodeURIComponent(startDate)}`;
-
     for (let attempt = 0; attempt <= retries; attempt++) {
       try {
         if (attempt > 0) {
           logger.info(`Retry attempt ${attempt}/${retries} for Aspire account ${accountId}...`);
-          // Wait before retry (exponential backoff with longer delays for Cloudflare)
-          const delay = Math.min(Math.pow(2, attempt) * 2000, 30000); // Max 30 seconds
+          // Wait before retry (exponential backoff)
+          const delay = Math.pow(2, attempt) * 1000; // 2s, 4s, etc.
           logger.info(`Waiting ${delay / 1000} seconds before retry...`);
           await new Promise(resolve => setTimeout(resolve, delay));
         }
 
-        logger.debug(`Fetching Aspire transactions from: ${url}`);
+        // Получаем первую страницу для получения метаданных
+        const firstPage = await this.fetchPage(accountId, startDate, 1);
+        logger.info(`✅ First page loaded, total transactions: ${firstPage.metadata?.total || firstPage.data.length}`);
         
-        const response = await fetch(url, {
-          method: 'GET',
-          headers: {
-            'Content-Type': 'application/json',
-            'Accept': 'application/json',
-            'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-            'Accept-Language': 'en-US,en;q=0.9',
-            'Accept-Encoding': 'gzip, deflate, br',
-            'Connection': 'keep-alive',
-            'Upgrade-Insecure-Requests': '1'
-          },
-          signal: AbortSignal.timeout(60000) // 60 second timeout
-        });
-
-        const responseText = await response.text();
-        
-        // Проверяем на Cloudflare Challenge
-        if (this.isCloudflareChallenge(responseText)) {
-          logger.warn(`⚠️  Cloudflare Challenge detected (attempt ${attempt + 1}/${retries + 1})`);
-          
-          if (attempt < retries) {
-            logger.info('Will retry after delay...');
-            continue; // Retry
-          } else {
-            throw new Error('Cloudflare Challenge: Proxy server is blocked by Cloudflare. Please try again later or check proxy server status.');
-          }
-        }
-        
-        if (!response.ok) {
-          // Если это не Cloudflare challenge, но статус не OK
-          if (this.isCloudflareChallenge(responseText)) {
-            // Двойная проверка
-            if (attempt < retries) {
-              logger.warn('Cloudflare Challenge detected in error response, will retry...');
-              continue;
-            } else {
-              throw new Error('Cloudflare Challenge: Proxy server is blocked by Cloudflare. Please try again later.');
-            }
-          }
-          
-          logger.error(`Aspire API returned ${response.status}: ${responseText.substring(0, 200)}...`);
-          
-          if (response.status === 500 && attempt < retries) {
-            logger.warn('Server error (500), will retry...');
-            continue; // Retry on server error
-          }
-          
-          if (response.status === 429 && attempt < retries) {
-            logger.warn('Rate limit (429), will retry with longer delay...');
-            await new Promise(resolve => setTimeout(resolve, 10000)); // 10 second delay for rate limit
-            continue;
-          }
-          
-          throw new Error(`Aspire API error: ${response.status} - ${responseText.substring(0, 200)}`);
+        // Если есть только одна страница, возвращаем как есть
+        if (!firstPage.metadata?.next_page_url) {
+          logger.info('📄 Single page, returning as is');
+          return firstPage.data || [];
         }
 
-        // Проверяем, что ответ - это JSON, а не HTML
-        if (responseText.trim().startsWith('<!DOCTYPE') || responseText.trim().startsWith('<html')) {
-          if (this.isCloudflareChallenge(responseText)) {
-            if (attempt < retries) {
-              logger.warn('Received HTML instead of JSON (Cloudflare Challenge), will retry...');
-              continue;
-            } else {
-              throw new Error('Cloudflare Challenge: Proxy server returned HTML instead of JSON. Please try again later.');
-            }
+        // Собираем все страницы
+        const allTransactions = [...(firstPage.data || [])];
+        let currentPage = 2;
+        const totalPages = firstPage.metadata?.total && firstPage.metadata?.per_page
+          ? Math.ceil(firstPage.metadata.total / firstPage.metadata.per_page)
+          : 1;
+
+        logger.info(`📚 Fetching ${totalPages} pages total...`);
+
+        while (currentPage <= totalPages) {
+          try {
+            logger.debug(`📄 Fetching page ${currentPage}/${totalPages}...`);
+            const pageData = await this.fetchPage(accountId, startDate, currentPage);
+            allTransactions.push(...(pageData.data || []));
+            currentPage++;
+            
+            // Небольшая задержка между запросами
+            await new Promise(resolve => setTimeout(resolve, 100));
+          } catch (error: any) {
+            logger.error(`❌ Error fetching page ${currentPage}:`, error.message);
+            // Продолжаем с тем, что уже получили
+            break;
           }
-          throw new Error('Invalid response: Expected JSON but received HTML');
         }
 
-        const data = JSON.parse(responseText) as AspireResponse;
-        
-        logger.info(`✅ Fetched ${data.data?.length || 0} transactions from Aspire account ${accountId}`);
-        
-        return data.data || [];
+        logger.info(`✅ Fetched ${allTransactions.length} transactions from Aspire account ${accountId}`);
+        return allTransactions;
       } catch (error: any) {
         if (error.name === 'AbortError' || error.name === 'TimeoutError') {
           logger.error(`Request timeout after 60 seconds (attempt ${attempt + 1}/${retries + 1})`);
           if (attempt < retries) {
             continue;
+          }
+        }
+        
+        // Проверяем статус ошибки, если это HTTP ошибка
+        if (error.message && error.message.includes('Aspire API error:')) {
+          const statusMatch = error.message.match(/error: (\d+)/);
+          if (statusMatch) {
+            const status = parseInt(statusMatch[1]);
+            if (status === 500 && attempt < retries) {
+              logger.warn('Server error (500), will retry...');
+              continue; // Retry on server error
+            }
+            
+            if (status === 429 && attempt < retries) {
+              logger.warn('Rate limit (429), will retry with longer delay...');
+              await new Promise(resolve => setTimeout(resolve, 10000)); // 10 second delay for rate limit
+              continue;
+            }
           }
         }
         

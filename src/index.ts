@@ -14,7 +14,7 @@ async function main() {
     syncStartDate: config.syncStartDate,
     logLevel: config.logLevel,
     finologEnabled: !!config.finologApiToken,
-    aspireEnabled: !!config.aspireProxyUrl,
+    aspireEnabled: !!(config.aspireClientId && config.aspireClientSecret),
     tronEnabled: !!(config.tronWalletAddress && config.tronApiKey),
   });
 

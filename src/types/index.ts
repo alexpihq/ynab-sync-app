@@ -131,7 +131,9 @@ export interface SyncLogEntry {
 export interface AppConfig {
   ynabToken: string;
   finologApiToken: string; // Optional - for Epic Web3 Finolog sync
-  aspireProxyUrl: string; // Optional - for Aspire Bank Innerly sync
+  // aspireProxyUrl: string; // Закомментировано - теперь используем прямые запросы
+  aspireClientId: string; // Optional - for Aspire Bank direct API access
+  aspireClientSecret: string; // Optional - for Aspire Bank direct API access
   tronWalletAddress: string; // Optional - for Tron USDT Innerly sync
   tronApiKey: string; // Optional - for Tron USDT Innerly sync
   supabaseUrl: string;

@@ -19,8 +19,10 @@ export const config: AppConfig = {
   // Finolog (optional)
   finologApiToken: getEnvVar('FINOLOG_API_TOKEN', false),
   
-  // Aspire Bank (optional)
-  aspireProxyUrl: getEnvVar('ASPIRE_PROXY_URL', false) || 'https://aspire-proxy-render.onrender.com',
+  // Aspire Bank (optional) - теперь используем прямые запросы вместо прокси
+  // aspireProxyUrl: getEnvVar('ASPIRE_PROXY_URL', false) || 'https://aspire-proxy-render.onrender.com', // Закомментировано
+  aspireClientId: getEnvVar('ASPIRE_CLIENT_ID', false),
+  aspireClientSecret: getEnvVar('ASPIRE_CLIENT_SECRET', false),
   
   // Tron Blockchain (optional)
   tronWalletAddress: getEnvVar('TRON_WALLET_ADDRESS', false) || '',
