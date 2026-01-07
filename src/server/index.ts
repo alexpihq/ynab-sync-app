@@ -255,6 +255,54 @@ app.post('/api/sync/run/:type', requireAuth, async (req, res) => {
   res.json({ success: true, message: `${type} sync started` });
 });
 
+// Public endpoint for external cron services (e.g., cron-job.org, EasyCron)
+// Protected by secret token instead of user authentication
+app.post('/api/cron/sync', async (req, res) => {
+  const cronSecret = process.env.CRON_SECRET;
+  
+  if (!cronSecret) {
+    logger.warn('⚠️  CRON_SECRET not set, cron endpoint disabled');
+    return res.status(503).json({ error: 'Cron endpoint not configured' });
+  }
+
+  const providedSecret = req.headers['x-cron-secret'] || req.query.secret;
+  
+  if (providedSecret !== cronSecret) {
+    logger.warn('⚠️  Invalid cron secret provided');
+    return res.status(401).json({ error: 'Unauthorized: Invalid secret' });
+  }
+
+  if (syncState.isRunning) {
+    logger.info('⏰ Cron triggered but sync already running, skipping...');
+    return res.status(409).json({ 
+      error: 'Sync already running',
+      message: 'Another sync is currently in progress'
+    });
+  }
+
+  logger.info('⏰ Cron-triggered sync started');
+  
+  // Start sync in background
+  runFullSync();
+  
+  res.json({ 
+    success: true, 
+    message: 'Sync started via cron',
+    timestamp: new Date().toISOString()
+  });
+});
+
+// Health check endpoint (also wakes up the app on free Render)
+app.get('/api/health', (req, res) => {
+  res.json({ 
+    status: 'ok',
+    timestamp: new Date().toISOString(),
+    uptime: process.uptime(),
+    syncRunning: syncState.isRunning,
+    lastSync: syncState.lastRun?.toISOString() || null
+  });
+});
+
 // Sync functions
 async function runFullSync() {
   if (syncState.isRunning) {
@@ -445,16 +493,20 @@ async function runSpecificSync(type: string) {
 }
 
 // Schedule automatic sync once per day at midnight UTC
-cron.schedule('0 0 * * *', () => {
-  logger.info('⏰ Scheduled sync triggered (daily)');
-  runFullSync();
-});
+// NOTE: On free Render tier, this won't work when the app is sleeping.
+// Use external cron service (cron-job.org, EasyCron, GitHub Actions) to call /api/cron/sync
+// cron.schedule('0 0 * * *', () => {
+//   logger.info('⏰ Scheduled sync triggered (daily)');
+//   runFullSync();
+// });
 
 // Start server
 app.listen(PORT, () => {
   logger.info(`🚀 Server running on http://localhost:${PORT}`);
-  logger.info(`⏰ Automatic sync scheduled daily at 00:00 UTC`);
+  logger.info(`⏰ Automatic sync: Use external cron service to call /api/cron/sync`);
+  logger.info(`   Example: cron-job.org → POST https://your-app.onrender.com/api/cron/sync?secret=YOUR_SECRET`);
   logger.info(`🔐 Authentication: Supabase Auth`);
+  logger.info(`📋 Health check: GET /api/health`);
   
   // Automatic initial sync disabled - run manually from dashboard
   // setTimeout(() => {
