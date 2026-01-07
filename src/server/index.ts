@@ -257,7 +257,8 @@ app.post('/api/sync/run/:type', requireAuth, async (req, res) => {
 
 // Public endpoint for external cron services (e.g., cron-job.org, EasyCron)
 // Protected by secret token instead of user authentication
-app.post('/api/cron/sync', async (req, res) => {
+// Supports both GET (for testing) and POST (for cron services)
+const handleCronSync = async (req: express.Request, res: express.Response) => {
   const cronSecret = process.env.CRON_SECRET;
   
   if (!cronSecret) {
@@ -290,7 +291,11 @@ app.post('/api/cron/sync', async (req, res) => {
     message: 'Sync started via cron',
     timestamp: new Date().toISOString()
   });
-});
+};
+
+// Support both GET (for testing) and POST (for cron services)
+app.get('/api/cron/sync', handleCronSync);
+app.post('/api/cron/sync', handleCronSync);
 
 // Health check endpoint (also wakes up the app on free Render)
 app.get('/api/health', (req, res) => {
