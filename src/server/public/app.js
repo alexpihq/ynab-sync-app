@@ -273,7 +273,8 @@ function updateStatusUI(data) {
       { key: 'ynab', label: '💰 YNAB ↔ YNAB', icon: '💰' },
       { key: 'finolog', label: '💼 Finolog → YNAB', icon: '💼' },
       { key: 'aspire', label: '🏦 Aspire → YNAB', icon: '🏦' },
-      { key: 'tron', label: '⛓️ Tron → YNAB', icon: '⛓️' }
+      { key: 'tron', label: '⛓️ Tron → YNAB', icon: '⛓️' },
+      { key: 'zerion', label: '🔗 Zerion (Ethereum & Solana) → YNAB', icon: '🔗' }
     ];
     
     types.forEach(({ key, label, icon }) => {

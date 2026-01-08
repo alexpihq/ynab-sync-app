@@ -539,7 +539,7 @@ export class SyncService {
         payee_name: payeeName,
         memo: memo.substring(0, 500), // YNAB limit
         cleared: 'cleared',
-        approved: true,
+        approved: false, // Requires manual approval in YNAB
         import_id: importId,
       });
 
@@ -980,7 +980,7 @@ export class SyncService {
           payee_name: undefined,
           memo: memo.substring(0, 500),
           cleared: 'cleared',
-          approved: true,
+          approved: false, // Requires manual approval in YNAB
           import_id: importId,
         });
 

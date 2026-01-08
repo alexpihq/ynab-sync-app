@@ -235,7 +235,7 @@ async function syncFinologAccount(accountConfig: FinologAccountConfig): Promise<
               amount: finalAmount,
               memo: memo,
               cleared: 'cleared',
-              approved: true,
+              approved: false, // Requires manual approval in YNAB
               import_id: `${importId}:${Date.now().toString().slice(-8)}`,
             });
 
@@ -312,7 +312,7 @@ async function syncFinologAccount(accountConfig: FinologAccountConfig): Promise<
           amount: finalAmount,
           memo: memo,
           cleared: 'cleared',
-          approved: true,
+          approved: false, // Requires manual approval in YNAB
           import_id: currentImportId,
         });
         
@@ -346,7 +346,7 @@ async function syncFinologAccount(accountConfig: FinologAccountConfig): Promise<
               amount: finalAmount,
               memo: memo,
               cleared: 'cleared',
-              approved: true,
+              approved: false, // Requires manual approval in YNAB
               import_id: currentImportId,
             });
             

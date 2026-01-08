@@ -101,7 +101,7 @@ export async function syncTronToYnab(): Promise<{ created: number; updated: numb
             payee_name: payeeName,
             memo: memo,
             cleared: 'cleared',
-            approved: true,
+            approved: false, // Requires manual approval in YNAB
             import_id: currentImportId,
           });
 
@@ -134,7 +134,7 @@ export async function syncTronToYnab(): Promise<{ created: number; updated: numb
                 payee_name: payeeName,
                 memo: memo,
                 cleared: 'cleared',
-                approved: true,
+                approved: false, // Requires manual approval in YNAB
                 import_id: currentImportId,
               });
 

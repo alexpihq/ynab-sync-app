@@ -186,7 +186,7 @@ async function processAspireAccount(
             payee_name: counterpartyName || undefined,
             memo: memo,
             cleared: 'cleared',
-            approved: true,
+            approved: false, // Requires manual approval in YNAB
             import_id: currentImportId,
           });
 
@@ -218,7 +218,7 @@ async function processAspireAccount(
                 payee_name: counterpartyName || undefined,
                 memo: memo,
                 cleared: 'cleared',
-                approved: true,
+                approved: false, // Requires manual approval in YNAB
                 import_id: currentImportId,
               });
 
