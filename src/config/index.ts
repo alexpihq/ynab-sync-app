@@ -28,6 +28,12 @@ export const config: AppConfig = {
   tronWalletAddress: getEnvVar('TRON_WALLET_ADDRESS', false) || '',
   tronApiKey: getEnvVar('TRON_API_KEY', false) || '',
   
+  // Zerion API (optional)
+  zerionApiKey: getEnvVar('ZERION_API_KEY', false) || '',
+  
+  // TBank Business API (optional)
+  tbankToken: getEnvVar('TBANK_TOKEN', false) || '',
+  
   // Supabase
   supabaseUrl: getEnvVar('SUPABASE_URL'),
   supabaseServiceKey: getEnvVar('SUPABASE_SERVICE_ROLE_KEY'),

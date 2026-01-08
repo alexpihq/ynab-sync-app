@@ -111,6 +111,23 @@ export async function convertEurToRub(
 }
 
 /**
+ * Конвертирует сумму из RUB в USD (через EUR)
+ * @param amountRub Сумма в RUB (milliunits)
+ * @param date Дата транзакции (YYYY-MM-DD)
+ * @returns Сумма в USD (milliunits) или null если курс не найден
+ */
+export async function convertRubToUsd(
+  amountRub: number,
+  date: string
+): Promise<number | null> {
+  // RUB -> EUR -> USD
+  const amountEur = await convertRubToEur(amountRub, date);
+  if (amountEur === null) return null;
+
+  return await convertEurToUsd(amountEur, date);
+}
+
+/**
  * Конвертирует сумму из SGD в USD
  * @param amountSgd Сумма в SGD (milliunits)
  * @param date Дата транзакции (YYYY-MM-DD)

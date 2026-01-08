@@ -611,6 +611,113 @@ class SupabaseService {
       logger.error('Error updating Finolog mapping YNAB ID:', error);
     }
   }
+
+  // ===== TBank Transaction Mappings =====
+  async createTbankMapping(
+    tbankAccountNumber: string,
+    tbankOperationId: string,
+    tbankOperationDate: string,
+    ynabBudgetId: string,
+    ynabAccountId: string,
+    ynabTransactionId: string,
+    tbankAmount: number,
+    tbankCurrency: string
+  ): Promise<void> {
+    const { error } = await this.client
+      .from('tbank_transaction_mappings')
+      .insert({
+        tbank_account_number: tbankAccountNumber,
+        tbank_operation_id: tbankOperationId,
+        tbank_operation_date: tbankOperationDate,
+        ynab_budget_id: ynabBudgetId,
+        ynab_account_id: ynabAccountId,
+        ynab_transaction_id: ynabTransactionId,
+        tbank_amount: tbankAmount,
+        tbank_currency: tbankCurrency,
+        sync_status: 'active',
+      });
+
+    if (error) {
+      logger.error('Error creating TBank mapping:', error);
+      throw error;
+    }
+  }
+
+  async getTbankMappingsByAccount(tbankAccountNumber: string): Promise<any[]> {
+    const { data, error } = await this.client
+      .from('tbank_transaction_mappings')
+      .select('*')
+      .eq('tbank_account_number', tbankAccountNumber)
+      .eq('sync_status', 'active');
+
+    if (error) {
+      logger.error('Error fetching TBank mappings:', error);
+      return [];
+    }
+
+    return data || [];
+  }
+
+  async getTbankMapping(
+    tbankAccountNumber: string,
+    tbankOperationId: string
+  ): Promise<any | null> {
+    const { data, error } = await this.client
+      .from('tbank_transaction_mappings')
+      .select('*')
+      .eq('tbank_account_number', tbankAccountNumber)
+      .eq('tbank_operation_id', tbankOperationId)
+      .eq('sync_status', 'active')
+      .single();
+
+    if (error) {
+      return null;
+    }
+
+    return data;
+  }
+
+  async updateTbankMappingStatus(
+    tbankAccountNumber: string,
+    tbankOperationId: string,
+    status: string
+  ): Promise<void> {
+    const { error } = await this.client
+      .from('tbank_transaction_mappings')
+      .update({
+        sync_status: status,
+        updated_at: new Date().toISOString()
+      })
+      .eq('tbank_account_number', tbankAccountNumber)
+      .eq('tbank_operation_id', tbankOperationId);
+
+    if (error) {
+      logger.error('Error updating TBank mapping status:', error);
+    }
+  }
+
+  async updateTbankMappingYnabId(
+    tbankAccountNumber: string,
+    tbankOperationId: string,
+    ynabTransactionId: string,
+    tbankAmount: number,
+    tbankOperationDate: string
+  ): Promise<void> {
+    const { error } = await this.client
+      .from('tbank_transaction_mappings')
+      .update({
+        ynab_transaction_id: ynabTransactionId,
+        tbank_amount: tbankAmount,
+        tbank_operation_date: tbankOperationDate,
+        updated_at: new Date().toISOString()
+      })
+      .eq('tbank_account_number', tbankAccountNumber)
+      .eq('tbank_operation_id', tbankOperationId);
+
+    if (error) {
+      logger.error('Error updating TBank mapping YNAB ID:', error);
+    }
+  }
 }
 
 export const supabase = new SupabaseService();

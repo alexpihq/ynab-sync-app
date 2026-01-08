@@ -10,6 +10,8 @@ import { syncService } from '../services/sync.js';
 import { syncFinologToYnab } from '../services/finologSync.js';
 import { syncAspireToYnab } from '../services/aspireSync.js';
 import { syncTronToYnab } from '../services/tronSync.js';
+import { syncTbankToYnab } from '../services/tbankSync.js';
+import { zerionSyncService } from '../services/zerionSync.js';
 import { supabase } from '../clients/supabase.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -112,6 +114,7 @@ interface SyncState {
     finolog?: any;
     aspire?: any;
     tron?: any;
+    zerion?: any;
   } | null;
   history: Array<{
     timestamp: Date;
@@ -245,7 +248,7 @@ app.post('/api/sync/run/:type', requireAuth, async (req, res) => {
     return res.status(409).json({ error: 'Sync already running' });
   }
 
-  if (!['ynab', 'finolog', 'aspire', 'tron'].includes(type)) {
+  if (!['ynab', 'finolog', 'aspire', 'tron', 'tbank', 'zerion'].includes(type)) {
     return res.status(400).json({ error: 'Invalid sync type' });
   }
 
@@ -363,6 +366,26 @@ async function runFullSync() {
       results.tron = { error: String(error) };
     }
 
+    // TBank → YNAB
+    try {
+      logger.info('🏦 TBank synchronization...');
+      const tbankResult = await syncTbankToYnab();
+      results.tbank = tbankResult;
+    } catch (error) {
+      logger.error('TBank sync failed:', error);
+      results.tbank = { error: String(error) };
+    }
+
+    // Zerion → YNAB
+    try {
+      logger.info('🔗 Zerion wallets synchronization...');
+      const zerionResult = await zerionSyncService.syncAllWallets();
+      results.zerion = zerionResult;
+    } catch (error) {
+      logger.error('Zerion sync failed:', error);
+      results.zerion = { error: String(error) };
+    }
+
     const duration = Date.now() - startTime;
     
     syncState.lastRun = new Date();
@@ -438,6 +461,12 @@ async function runSpecificSync(type: string) {
         break;
       case 'tron':
         result = await syncTronToYnab();
+        break;
+      case 'tbank':
+        result = await syncTbankToYnab();
+        break;
+      case 'zerion':
+        result = await zerionSyncService.syncAllWallets();
         break;
     }
     
