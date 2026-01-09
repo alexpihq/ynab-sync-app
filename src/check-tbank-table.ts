@@ -54,3 +54,4 @@ async function checkTbankTable() {
 // Запускаем проверку
 checkTbankTable();
 
+

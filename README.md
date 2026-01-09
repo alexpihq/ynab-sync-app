@@ -9,7 +9,7 @@ Unified synchronization application for YNAB budgets with web dashboard.
 ✅ **Aspire Bank → YNAB**: Automatic bank statement import  
 ✅ **Tron Blockchain → YNAB**: USDT transaction import from Tron  
 ✅ **Web Dashboard**: Simple web interface with authentication  
-✅ **Automatic Sync**: Scheduled synchronization once per day (00:00 UTC)  
+✅ **Automatic Sync**: Built-in cron runs daily at 00:00 UTC (paid Render plan)  
 ✅ **Manual Triggers**: Run syncs on-demand via web UI  
 ✅ **Sync History**: View past synchronization results
 

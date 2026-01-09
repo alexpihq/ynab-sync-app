@@ -65,3 +65,4 @@ COMMENT ON COLUMN tbank_transaction_mappings.tbank_amount IS 'Сумма опе�
 COMMENT ON COLUMN tbank_transaction_mappings.tbank_currency IS 'Валюта операции (RUB, USD, GBP, EUR)';
 COMMENT ON COLUMN tbank_transaction_mappings.sync_status IS 'Статус синхронизации: active, deleted, error';
 
+

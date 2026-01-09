@@ -526,19 +526,28 @@ async function runSpecificSync(type: string) {
   }
 }
 
+// Helper to calculate next midnight UTC
+function getNextMidnightUTC(): Date {
+  const now = new Date();
+  const tomorrow = new Date(now);
+  tomorrow.setUTCDate(tomorrow.getUTCDate() + 1);
+  tomorrow.setUTCHours(0, 0, 0, 0);
+  return tomorrow;
+}
+
 // Schedule automatic sync once per day at midnight UTC
-// NOTE: On free Render tier, this won't work when the app is sleeping.
-// Use external cron service (cron-job.org, EasyCron, GitHub Actions) to call /api/cron/sync
-// cron.schedule('0 0 * * *', () => {
-//   logger.info('⏰ Scheduled sync triggered (daily)');
-//   runFullSync();
-// });
+// Runs daily since the app is on paid Render plan (no sleep)
+cron.schedule('0 0 * * *', () => {
+  logger.info('⏰ Scheduled daily sync triggered at midnight UTC');
+  runFullSync();
+});
 
 // Start server
 app.listen(PORT, () => {
   logger.info(`🚀 Server running on http://localhost:${PORT}`);
-  logger.info(`⏰ Automatic sync: Use external cron service to call /api/cron/sync`);
-  logger.info(`   Example: cron-job.org → POST https://your-app.onrender.com/api/cron/sync?secret=YOUR_SECRET`);
+  logger.info(`⏰ Automatic sync: Enabled (daily at 00:00 UTC)`);
+  logger.info(`   Next sync: ${getNextMidnightUTC().toISOString()}`);
+  logger.info(`   Alternative: External cron → POST /api/cron/sync?secret=YOUR_SECRET`);
   logger.info(`🔐 Authentication: Supabase Auth`);
   logger.info(`📋 Health check: GET /api/health`);
   
