@@ -74,9 +74,11 @@ export async function convertRubToEur(
     return null;
   }
 
-  // amountRub в milliunits
-  // делим на rate чтобы получить EUR
-  const amountEur = Math.round(amountRub / rate);
+  // amountRub в milliunits (копейки, 1/100 RUB)
+  // EUR milliunits = центы (1/1000 EUR)
+  // Соотношение: 1000/100 = 10, поэтому умножаем на 10
+  // Формула: (RUB копейки / rate) * 10 = EUR центы
+  const amountEur = Math.round((amountRub / rate) * 10);
 
   logger.debug(`Currency conversion: ${amountRub} RUB milliunits -> ${amountEur} EUR milliunits (rate: ${rate})`);
 

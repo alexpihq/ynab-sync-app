@@ -11,6 +11,7 @@ import { syncFinologToYnab } from '../services/finologSync.js';
 import { syncAspireToYnab } from '../services/aspireSync.js';
 import { syncTronToYnab } from '../services/tronSync.js';
 import { syncTbankToYnab } from '../services/tbankSync.js';
+import { syncZenmoneyToYnab } from '../services/zenmoneySync.js';
 import { zerionSyncService } from '../services/zerionSync.js';
 import { supabase } from '../clients/supabase.js';
 
@@ -248,7 +249,7 @@ app.post('/api/sync/run/:type', requireAuth, async (req, res) => {
     return res.status(409).json({ error: 'Sync already running' });
   }
 
-  if (!['ynab', 'finolog', 'aspire', 'tron', 'tbank', 'zerion'].includes(type)) {
+  if (!['ynab', 'finolog', 'aspire', 'tron', 'tbank', 'zenmoney', 'zerion'].includes(type)) {
     return res.status(400).json({ error: 'Invalid sync type' });
   }
 
@@ -309,6 +310,98 @@ app.get('/api/health', (req, res) => {
     syncRunning: syncState.isRunning,
     lastSync: syncState.lastRun?.toISOString() || null
   });
+});
+
+// Exchange rates endpoints
+app.get('/api/rates', requireAuth, async (req, res) => {
+  try {
+    logger.info('GET /api/rates - fetching exchange rates');
+    const { data, error } = await supabase.client
+      .from('exchange_rates')
+      .select('*')
+      .order('month', { ascending: false });
+
+    if (error) {
+      logger.error('Supabase error:', error);
+      throw error;
+    }
+
+    logger.info(`Successfully fetched ${data?.length || 0} rates`);
+    res.json({ success: true, data });
+  } catch (error: any) {
+    logger.error('Error fetching rates:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+app.post('/api/rates', requireAuth, async (req, res) => {
+  try {
+    const { month, eur_to_usd, eur_to_rub, usd_to_sgd, source } = req.body;
+
+    const { data, error } = await supabase.client
+      .from('exchange_rates')
+      .insert({
+        month,
+        eur_to_usd,
+        eur_to_rub,
+        usd_to_sgd,
+        source
+      })
+      .select()
+      .single();
+
+    if (error) throw error;
+
+    res.json({ success: true, data });
+  } catch (error: any) {
+    logger.error('Error creating rate:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+app.put('/api/rates/:month', requireAuth, async (req, res) => {
+  try {
+    const { month } = req.params;
+    const { eur_to_usd, eur_to_rub, usd_to_sgd, source } = req.body;
+
+    const { data, error } = await supabase.client
+      .from('exchange_rates')
+      .update({
+        eur_to_usd,
+        eur_to_rub,
+        usd_to_sgd,
+        source,
+        updated_at: new Date().toISOString()
+      })
+      .eq('month', month)
+      .select()
+      .single();
+
+    if (error) throw error;
+
+    res.json({ success: true, data });
+  } catch (error: any) {
+    logger.error('Error updating rate:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+app.delete('/api/rates/:month', requireAuth, async (req, res) => {
+  try {
+    const { month } = req.params;
+
+    const { error } = await supabase.client
+      .from('exchange_rates')
+      .delete()
+      .eq('month', month);
+
+    if (error) throw error;
+
+    res.json({ success: true });
+  } catch (error: any) {
+    logger.error('Error deleting rate:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
 });
 
 // Sync functions
@@ -374,6 +467,16 @@ async function runFullSync() {
     } catch (error) {
       logger.error('TBank sync failed:', error);
       results.tbank = { error: String(error) };
+    }
+
+    // Zenmoney → YNAB
+    try {
+      logger.info('💳 Zenmoney synchronization...');
+      const zenmoneyResult = await syncZenmoneyToYnab();
+      results.zenmoney = zenmoneyResult;
+    } catch (error) {
+      logger.error('Zenmoney sync failed:', error);
+      results.zenmoney = { error: String(error) };
     }
 
     // Zerion → YNAB
@@ -464,6 +567,9 @@ async function runSpecificSync(type: string) {
         break;
       case 'tbank':
         result = await syncTbankToYnab();
+        break;
+      case 'zenmoney':
+        result = await syncZenmoneyToYnab();
         break;
       case 'zerion':
         result = await zerionSyncService.syncAllWallets();

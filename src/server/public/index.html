@@ -25,7 +25,10 @@
     <div class="dashboard">
       <header>
         <h1>📊 YNAB Sync Dashboard</h1>
-        <button id="logout-btn" class="logout-btn">Logout</button>
+        <div class="header-buttons">
+          <button id="rates-btn" class="rates-btn" onclick="window.location.href='/rates.html'">💱 Exchange Rates</button>
+          <button id="logout-btn" class="logout-btn">Logout</button>
+        </div>
       </header>
 
       <div class="status-card">
@@ -65,6 +68,9 @@
           </button>
           <button class="sync-btn secondary" onclick="runSync('tbank')">
             🏦 TBank → YNAB
+          </button>
+          <button class="sync-btn secondary" onclick="runSync('zenmoney')">
+            💳 Zenmoney → YNAB
           </button>
         </div>
       </div>

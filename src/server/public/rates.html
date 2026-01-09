@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Exchange Rates - YNAB Sync</title>
+  <link rel="stylesheet" href="/styles.css">
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body>
+  <div id="rates-page" class="page">
+    <div class="dashboard">
+      <header>
+        <h1>💱 Exchange Rates</h1>
+        <div class="header-buttons">
+          <button onclick="window.location.href='/'" class="rates-btn">← Back to Dashboard</button>
+          <button id="logout-btn" class="logout-btn">Logout</button>
+        </div>
+      </header>
+
+      <div class="rates-card">
+        <div class="rates-header">
+          <h2>Currency Exchange Rates</h2>
+          <button id="add-rate-btn" class="sync-btn">+ Add New Month</button>
+        </div>
+        
+        <div id="rates-loading" class="loading">Loading rates...</div>
+        <div id="rates-error" class="error" style="display: none;"></div>
+        
+        <div id="rates-table-container" style="display: none;">
+          <table class="rates-table">
+            <thead>
+              <tr>
+                <th>Month</th>
+                <th>EUR → USD</th>
+                <th>EUR → RUB</th>
+                <th>USD → SGD</th>
+                <th>Source</th>
+                <th>Updated</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody id="rates-tbody">
+              <!-- Rates will be loaded here -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Edit Rate Modal -->
+  <div id="edit-modal" class="modal" style="display: none;">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2 id="modal-title">Edit Exchange Rate</h2>
+        <button class="modal-close" onclick="closeEditModal()">&times;</button>
+      </div>
+      <form id="edit-rate-form">
+        <div class="form-group">
+          <label for="edit-month">Month (YYYY-MM)</label>
+          <input type="month" id="edit-month" required>
+        </div>
+        <div class="form-group">
+          <label for="edit-eur-usd">EUR → USD</label>
+          <input type="number" id="edit-eur-usd" step="0.0001" min="0" required>
+        </div>
+        <div class="form-group">
+          <label for="edit-eur-rub">EUR → RUB</label>
+          <input type="number" id="edit-eur-rub" step="0.0001" min="0">
+        </div>
+        <div class="form-group">
+          <label for="edit-usd-sgd">USD → SGD</label>
+          <input type="number" id="edit-usd-sgd" step="0.0001" min="0">
+        </div>
+        <div class="form-group">
+          <label for="edit-source">Source</label>
+          <input type="text" id="edit-source" placeholder="e.g., ECB, manual">
+        </div>
+        <div class="modal-actions">
+          <button type="button" class="btn-secondary" onclick="closeEditModal()">Cancel</button>
+          <button type="submit" class="btn-primary">Save</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script src="/rates.js"></script>
+</body>
+</html>
+

@@ -34,6 +34,9 @@ export const config: AppConfig = {
   // TBank Business API (optional)
   tbankToken: getEnvVar('TBANK_TOKEN', false) || '',
   
+  // Zenmoney API (optional)
+  zenmoneyToken: getEnvVar('ZENMONEY_TOKEN', false) || '',
+  
   // Supabase
   supabaseUrl: getEnvVar('SUPABASE_URL'),
   supabaseServiceKey: getEnvVar('SUPABASE_SERVICE_ROLE_KEY'),

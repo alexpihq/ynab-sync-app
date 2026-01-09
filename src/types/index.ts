@@ -137,7 +137,8 @@ export interface AppConfig {
   tronWalletAddress: string; // Optional - for Tron USDT Innerly sync
   tronApiKey: string; // Optional - for Tron USDT Innerly sync
   zerionApiKey: string; // Optional - for Zerion crypto wallets sync
-  tbankToken: string; // Optional - for TBank Business API access
+  tbankToken: string;
+  zenmoneyToken: string; // Optional - for TBank Business API access
   supabaseUrl: string;
   supabaseServiceKey: string;
   personalBudgetId: string;

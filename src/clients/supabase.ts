@@ -718,6 +718,122 @@ class SupabaseService {
       logger.error('Error updating TBank mapping YNAB ID:', error);
     }
   }
+
+  // ===== Zenmoney Transaction Mappings =====
+  async createZenmoneyMapping(
+    zenmoneyTransactionId: string,
+    zenmoneyAccountId: string,
+    ynabBudgetId: string,
+    ynabAccountId: string,
+    amountRub: number,
+    amountEur: number,
+    date: string,
+    payee: string | null,
+    memo: string | null
+  ): Promise<void> {
+    const { error } = await this.client
+      .from('zenmoney_transaction_mappings')
+      .insert({
+        zenmoney_transaction_id: zenmoneyTransactionId,
+        zenmoney_account_id: zenmoneyAccountId,
+        ynab_budget_id: ynabBudgetId,
+        ynab_account_id: ynabAccountId,
+        amount_rub: amountRub,
+        amount_eur: amountEur,
+        date,
+        payee,
+        memo,
+        status: 'pending'
+      });
+
+    if (error) {
+      logger.error('Error creating Zenmoney mapping:', error);
+      throw error;
+    }
+  }
+
+  async getZenmoneyMappingsByAccount(
+    zenmoneyAccountId: string,
+    ynabBudgetId: string
+  ): Promise<any[]> {
+    const { data, error } = await this.client
+      .from('zenmoney_transaction_mappings')
+      .select('*')
+      .eq('zenmoney_account_id', zenmoneyAccountId)
+      .eq('ynab_budget_id', ynabBudgetId);
+
+    if (error) {
+      logger.error('Error fetching Zenmoney mappings:', error);
+      return [];
+    }
+
+    return data || [];
+  }
+
+  async getZenmoneyMapping(
+    zenmoneyTransactionId: string,
+    zenmoneyAccountId: string,
+    ynabBudgetId: string
+  ): Promise<any | null> {
+    const { data, error } = await this.client
+      .from('zenmoney_transaction_mappings')
+      .select('*')
+      .eq('zenmoney_transaction_id', zenmoneyTransactionId)
+      .eq('zenmoney_account_id', zenmoneyAccountId)
+      .eq('ynab_budget_id', ynabBudgetId)
+      .single();
+
+    if (error && error.code !== 'PGRST116') {
+      logger.error('Error fetching Zenmoney mapping:', error);
+    }
+
+    return data;
+  }
+
+  async updateZenmoneyMappingStatus(
+    zenmoneyTransactionId: string,
+    zenmoneyAccountId: string,
+    ynabBudgetId: string,
+    status: string,
+    errorMessage?: string
+  ): Promise<void> {
+    const { error } = await this.client
+      .from('zenmoney_transaction_mappings')
+      .update({
+        status,
+        error_message: errorMessage || null,
+        updated_at: new Date().toISOString()
+      })
+      .eq('zenmoney_transaction_id', zenmoneyTransactionId)
+      .eq('zenmoney_account_id', zenmoneyAccountId)
+      .eq('ynab_budget_id', ynabBudgetId);
+
+    if (error) {
+      logger.error('Error updating Zenmoney mapping status:', error);
+    }
+  }
+
+  async updateZenmoneyMappingYnabId(
+    zenmoneyTransactionId: string,
+    zenmoneyAccountId: string,
+    ynabBudgetId: string,
+    ynabTransactionId: string
+  ): Promise<void> {
+    const { error } = await this.client
+      .from('zenmoney_transaction_mappings')
+      .update({
+        ynab_transaction_id: ynabTransactionId,
+        status: 'created',
+        updated_at: new Date().toISOString()
+      })
+      .eq('zenmoney_transaction_id', zenmoneyTransactionId)
+      .eq('zenmoney_account_id', zenmoneyAccountId)
+      .eq('ynab_budget_id', ynabBudgetId);
+
+    if (error) {
+      logger.error('Error updating Zenmoney mapping YNAB ID:', error);
+    }
+  }
 }
 
 export const supabase = new SupabaseService();
