@@ -202,3 +202,5 @@ ON CONFLICT (month) DO UPDATE SET eur_to_usd = EXCLUDED.eur_to_usd;
 
 
 
+
+

@@ -124,3 +124,5 @@ Documentation: https://github.com/zenmoney/ZenPlugins/wiki/ZenMoney-API
 - YNAB import_id format: `ZENMONEY:{date}:{amount}:{id_prefix}`
 - Memo is limited to 200 characters (YNAB limit)
 
+
+

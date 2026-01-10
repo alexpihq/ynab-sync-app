@@ -367,6 +367,21 @@ class SupabaseService {
     return data?.usd_to_sgd || null;
   }
 
+  async getExchangeRateGbp(month: string): Promise<number | null> {
+    const { data, error } = await this.client
+      .from('exchange_rates')
+      .select('gbp_to_usd')
+      .eq('month', month)
+      .single();
+
+    if (error) {
+      logger.error(`Error fetching GBP/USD rate for ${month}:`, error);
+      return null;
+    }
+
+    return data?.gbp_to_usd || null;
+  }
+
   // ===== Aspire Transaction Mappings =====
   async createAspireMapping(
     aspireAccountId: string,
@@ -833,6 +848,117 @@ class SupabaseService {
     if (error) {
       logger.error('Error updating Zenmoney mapping YNAB ID:', error);
     }
+  }
+
+  // ===== Conversion Accounts =====
+  async getConversionAccounts(): Promise<any[]> {
+    const { data, error } = await this.client
+      .from('conversion_accounts')
+      .select('*')
+      .eq('is_active', true);
+
+    if (error) {
+      logger.error('Error fetching conversion accounts:', error);
+      return [];
+    }
+
+    return data || [];
+  }
+
+  async getAllConversionAccounts(): Promise<any[]> {
+    const { data, error } = await this.client
+      .from('conversion_accounts')
+      .select('*')
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      logger.error('Error fetching all conversion accounts:', error);
+      return [];
+    }
+
+    return data || [];
+  }
+
+  async getConversionAccount(id: string): Promise<any | null> {
+    const { data, error } = await this.client
+      .from('conversion_accounts')
+      .select('*')
+      .eq('id', id)
+      .single();
+
+    if (error && error.code !== 'PGRST116') {
+      logger.error('Error fetching conversion account:', error);
+    }
+
+    return data;
+  }
+
+  async createConversionAccount(
+    budgetId: string,
+    accountId: string,
+    sourceCurrency: string,
+    targetCurrency: string
+  ): Promise<any | null> {
+    const { data, error } = await this.client
+      .from('conversion_accounts')
+      .insert({
+        budget_id: budgetId,
+        account_id: accountId,
+        source_currency: sourceCurrency,
+        target_currency: targetCurrency,
+        is_active: true,
+      })
+      .select()
+      .single();
+
+    if (error) {
+      logger.error('Error creating conversion account:', error);
+      return null;
+    }
+
+    return data;
+  }
+
+  async updateConversionAccount(
+    id: string,
+    updates: {
+      budget_id?: string;
+      account_id?: string;
+      source_currency?: string;
+      target_currency?: string;
+      is_active?: boolean;
+    }
+  ): Promise<any | null> {
+    const { data, error } = await this.client
+      .from('conversion_accounts')
+      .update({
+        ...updates,
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', id)
+      .select()
+      .single();
+
+    if (error) {
+      logger.error('Error updating conversion account:', error);
+      return null;
+    }
+
+    return data;
+  }
+
+  async deleteConversionAccount(id: string): Promise<boolean> {
+    const { error } = await this.client
+      .from('conversion_accounts')
+      .delete()
+      .eq('id', id);
+
+    if (error) {
+      logger.error('Error deleting conversion account:', error);
+      return false;
+    }
+
+    return true;
   }
 }
 

@@ -27,6 +27,7 @@
         <h1>📊 YNAB Sync Dashboard</h1>
         <div class="header-buttons">
           <button id="rates-btn" class="rates-btn" onclick="window.location.href='/rates.html'">💱 Exchange Rates</button>
+          <button id="conversion-btn" class="rates-btn" onclick="window.location.href='/conversion.html'">🔄 Currency Conversion</button>
           <button id="logout-btn" class="logout-btn">Logout</button>
         </div>
       </header>
@@ -71,6 +72,9 @@
           </button>
           <button class="sync-btn secondary" onclick="runSync('zenmoney')">
             💳 Zenmoney → YNAB
+          </button>
+          <button class="sync-btn secondary" onclick="runSync('conversion')">
+            💱 Currency Conversion
           </button>
         </div>
       </div>

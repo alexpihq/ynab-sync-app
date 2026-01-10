@@ -13,7 +13,9 @@ import { syncTronToYnab } from '../services/tronSync.js';
 import { syncTbankToYnab } from '../services/tbankSync.js';
 import { syncZenmoneyToYnab } from '../services/zenmoneySync.js';
 import { zerionSyncService } from '../services/zerionSync.js';
+import { syncConversionAccounts } from '../services/conversionSync.js';
 import { supabase } from '../clients/supabase.js';
+import { ynab } from '../clients/ynab.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -249,7 +251,7 @@ app.post('/api/sync/run/:type', requireAuth, async (req, res) => {
     return res.status(409).json({ error: 'Sync already running' });
   }
 
-  if (!['ynab', 'finolog', 'aspire', 'tron', 'tbank', 'zenmoney', 'zerion'].includes(type)) {
+  if (!['ynab', 'finolog', 'aspire', 'tron', 'tbank', 'zenmoney', 'zerion', 'conversion'].includes(type)) {
     return res.status(400).json({ error: 'Invalid sync type' });
   }
 
@@ -336,13 +338,14 @@ app.get('/api/rates', requireAuth, async (req, res) => {
 
 app.post('/api/rates', requireAuth, async (req, res) => {
   try {
-    const { month, eur_to_usd, eur_to_rub, usd_to_sgd, source } = req.body;
+    const { month, eur_to_usd, gbp_to_usd, eur_to_rub, usd_to_sgd, source } = req.body;
 
     const { data, error } = await supabase.client
       .from('exchange_rates')
       .insert({
         month,
         eur_to_usd,
+        gbp_to_usd,
         eur_to_rub,
         usd_to_sgd,
         source
@@ -362,12 +365,13 @@ app.post('/api/rates', requireAuth, async (req, res) => {
 app.put('/api/rates/:month', requireAuth, async (req, res) => {
   try {
     const { month } = req.params;
-    const { eur_to_usd, eur_to_rub, usd_to_sgd, source } = req.body;
+    const { eur_to_usd, gbp_to_usd, eur_to_rub, usd_to_sgd, source } = req.body;
 
     const { data, error } = await supabase.client
       .from('exchange_rates')
       .update({
         eur_to_usd,
+        gbp_to_usd,
         eur_to_rub,
         usd_to_sgd,
         source,
@@ -400,6 +404,110 @@ app.delete('/api/rates/:month', requireAuth, async (req, res) => {
     res.json({ success: true });
   } catch (error: any) {
     logger.error('Error deleting rate:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// YNAB data endpoints
+app.get('/api/ynab/budgets', requireAuth, async (req, res) => {
+  try {
+    const budgets = await ynab.getBudgets();
+    res.json({ success: true, data: budgets });
+  } catch (error: any) {
+    logger.error('Error fetching YNAB budgets:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+app.get('/api/ynab/budgets/:budgetId/accounts', requireAuth, async (req, res) => {
+  try {
+    const { budgetId } = req.params;
+    const accounts = await ynab.getAccounts(budgetId);
+    // Filter out closed accounts
+    const openAccounts = accounts.filter(a => !a.closed);
+    res.json({ success: true, data: openAccounts });
+  } catch (error: any) {
+    logger.error('Error fetching YNAB accounts:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Conversion accounts endpoints
+app.get('/api/conversion-accounts', requireAuth, async (req, res) => {
+  try {
+    const accounts = await supabase.getAllConversionAccounts();
+    res.json({ success: true, data: accounts });
+  } catch (error: any) {
+    logger.error('Error fetching conversion accounts:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+app.post('/api/conversion-accounts', requireAuth, async (req, res) => {
+  try {
+    const { budget_id, account_id, source_currency, target_currency } = req.body;
+
+    if (!budget_id || !account_id || !source_currency || !target_currency) {
+      return res.status(400).json({
+        success: false,
+        error: 'Missing required fields: budget_id, account_id, source_currency, target_currency'
+      });
+    }
+
+    const account = await supabase.createConversionAccount(
+      budget_id,
+      account_id,
+      source_currency,
+      target_currency
+    );
+
+    if (!account) {
+      return res.status(500).json({ success: false, error: 'Failed to create account' });
+    }
+
+    res.json({ success: true, data: account });
+  } catch (error: any) {
+    logger.error('Error creating conversion account:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+app.put('/api/conversion-accounts/:id', requireAuth, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { budget_id, account_id, source_currency, target_currency, is_active } = req.body;
+
+    const account = await supabase.updateConversionAccount(id, {
+      budget_id,
+      account_id,
+      source_currency,
+      target_currency,
+      is_active,
+    });
+
+    if (!account) {
+      return res.status(500).json({ success: false, error: 'Failed to update account' });
+    }
+
+    res.json({ success: true, data: account });
+  } catch (error: any) {
+    logger.error('Error updating conversion account:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+app.delete('/api/conversion-accounts/:id', requireAuth, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const success = await supabase.deleteConversionAccount(id);
+
+    if (!success) {
+      return res.status(500).json({ success: false, error: 'Failed to delete account' });
+    }
+
+    res.json({ success: true });
+  } catch (error: any) {
+    logger.error('Error deleting conversion account:', error);
     res.status(500).json({ success: false, error: error.message });
   }
 });
@@ -489,6 +597,16 @@ async function runFullSync() {
       results.zerion = { error: String(error) };
     }
 
+    // Currency Conversion
+    try {
+      logger.info('💱 Currency conversion synchronization...');
+      const conversionResult = await syncConversionAccounts();
+      results.conversion = conversionResult;
+    } catch (error) {
+      logger.error('Currency conversion sync failed:', error);
+      results.conversion = { error: String(error) };
+    }
+
     const duration = Date.now() - startTime;
     
     syncState.lastRun = new Date();
@@ -573,6 +691,9 @@ async function runSpecificSync(type: string) {
         break;
       case 'zerion':
         result = await zerionSyncService.syncAllWallets();
+        break;
+      case 'conversion':
+        result = await syncConversionAccounts();
         break;
     }
     

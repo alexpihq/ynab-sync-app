@@ -197,6 +197,53 @@ LIMIT 50;
 
 ---
 
+### 7. conversion_accounts
+Аккаунты для автоматической конвертации валют в YNAB транзакциях.
+
+| Column | Type | Description |
+|--------|------|-------------|
+| id | UUID (PK) | Уникальный ID записи |
+| budget_id | UUID | ID бюджета YNAB |
+| account_id | UUID | ID аккаунта в бюджете YNAB |
+| source_currency | TEXT | Исходная валюта (EUR, RUB, SGD) |
+| target_currency | TEXT | Целевая валюта бюджета (USD, EUR) |
+| is_active | BOOLEAN | Активна ли конвертация |
+| created_at | TIMESTAMPTZ | Дата создания записи |
+| updated_at | TIMESTAMPTZ | Дата последнего обновления |
+
+**Purpose:**
+Автоматически конвертирует транзакции, которые импортируются в одной валюте, в валюту бюджета. Оригинальная сумма сохраняется в memo (например, "123.45 EUR | Original memo").
+
+**SQL Creation:**
+```sql
+CREATE TABLE conversion_accounts (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  budget_id UUID NOT NULL,
+  account_id UUID NOT NULL,
+  source_currency TEXT NOT NULL CHECK (source_currency IN ('EUR', 'RUB', 'SGD')),
+  target_currency TEXT NOT NULL CHECK (target_currency IN ('USD', 'EUR')),
+  is_active BOOLEAN DEFAULT true,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW(),
+  UNIQUE(budget_id, account_id)
+);
+
+CREATE INDEX idx_conversion_accounts_active ON conversion_accounts (is_active) WHERE is_active = true;
+```
+
+**Example:**
+```sql
+INSERT INTO conversion_accounts (budget_id, account_id, source_currency, target_currency)
+VALUES (
+  '9c2dd1ba-36c2-4cb9-9428-6882160a155a',  -- Innerly budget
+  '9432ff4b-5858-4bcb-bdd5-1118884780db',  -- Account that imports EUR
+  'EUR',
+  'USD'
+);
+```
+
+---
+
 ## Notes for Epic Web3
 
 Бюджет Epic Web3 еще не создан в YNAB. Когда появится:
@@ -231,6 +278,8 @@ INSERT INTO loan_accounts (
 INSERT INTO sync_state (budget_id, last_server_knowledge)
 VALUES ('EPIC_BUDGET_ID', 0);
 ```
+
+
 
 
 

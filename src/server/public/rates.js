@@ -93,13 +93,14 @@ async function loadRates() {
     tbody.innerHTML = '';
 
     if (!data || data.length === 0) {
-      tbody.innerHTML = '<tr><td colspan="7" style="text-align: center; padding: 2rem;">No exchange rates found. Click "Add New Month" to create one.</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="8" style="text-align: center; padding: 2rem;">No exchange rates found. Click "Add New Month" to create one.</td></tr>';
     } else {
       data.forEach(rate => {
         const row = document.createElement('tr');
         row.innerHTML = `
           <td><strong>${rate.month}</strong></td>
           <td>${rate.eur_to_usd ? rate.eur_to_usd.toFixed(4) : '-'}</td>
+          <td>${rate.gbp_to_usd ? rate.gbp_to_usd.toFixed(4) : '-'}</td>
           <td>${rate.eur_to_rub ? rate.eur_to_rub.toFixed(4) : '-'}</td>
           <td>${rate.usd_to_sgd ? rate.usd_to_sgd.toFixed(4) : '-'}</td>
           <td>${rate.source || '-'}</td>
@@ -134,6 +135,7 @@ document.getElementById('add-rate-btn').addEventListener('click', () => {
   document.getElementById('edit-month').value = '';
   document.getElementById('edit-month').disabled = false;
   document.getElementById('edit-eur-usd').value = '';
+  document.getElementById('edit-gbp-usd').value = '';
   document.getElementById('edit-eur-rub').value = '';
   document.getElementById('edit-usd-sgd').value = '';
   document.getElementById('edit-source').value = 'manual';
@@ -154,6 +156,7 @@ window.editRate = async function(month) {
     document.getElementById('edit-month').value = rate.month;
     document.getElementById('edit-month').disabled = true;
     document.getElementById('edit-eur-usd').value = rate.eur_to_usd || '';
+    document.getElementById('edit-gbp-usd').value = rate.gbp_to_usd || '';
     document.getElementById('edit-eur-rub').value = rate.eur_to_rub || '';
     document.getElementById('edit-usd-sgd').value = rate.usd_to_sgd || '';
     document.getElementById('edit-source').value = rate.source || '';
@@ -176,6 +179,7 @@ document.getElementById('edit-rate-form').addEventListener('submit', async (e) =
 
   const month = document.getElementById('edit-month').value;
   const eurToUsd = parseFloat(document.getElementById('edit-eur-usd').value);
+  const gbpToUsd = parseFloat(document.getElementById('edit-gbp-usd').value) || null;
   const eurToRub = parseFloat(document.getElementById('edit-eur-rub').value) || null;
   const usdToSgd = parseFloat(document.getElementById('edit-usd-sgd').value) || null;
   const source = document.getElementById('edit-source').value || 'manual';
@@ -187,6 +191,7 @@ document.getElementById('edit-rate-form').addEventListener('submit', async (e) =
         method: 'PUT',
         body: JSON.stringify({
           eur_to_usd: eurToUsd,
+          gbp_to_usd: gbpToUsd,
           eur_to_rub: eurToRub,
           usd_to_sgd: usdToSgd,
           source: source
@@ -200,6 +205,7 @@ document.getElementById('edit-rate-form').addEventListener('submit', async (e) =
         body: JSON.stringify({
           month: month,
           eur_to_usd: eurToUsd,
+          gbp_to_usd: gbpToUsd,
           eur_to_rub: eurToRub,
           usd_to_sgd: usdToSgd,
           source: source

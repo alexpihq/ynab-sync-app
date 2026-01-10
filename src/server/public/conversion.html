@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Currency Conversion - YNAB Sync</title>
+  <link rel="stylesheet" href="/styles.css">
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body>
+  <div id="conversion-page" class="page">
+    <div class="dashboard">
+      <header>
+        <h1>💱 Currency Conversion</h1>
+        <div class="header-buttons">
+          <button onclick="window.location.href='/'" class="rates-btn">← Back to Dashboard</button>
+          <button id="logout-btn" class="logout-btn">Logout</button>
+        </div>
+      </header>
+
+      <div class="info-card">
+        <h3>About Currency Conversion</h3>
+        <p>This module automatically converts transactions in YNAB accounts where transactions are imported in a different currency than the budget currency.</p>
+        <p>For example: if your budget is in USD but bank imports transactions in EUR, this module will convert them to USD using exchange rates from the database.</p>
+        <p>The original amount is preserved in the memo field (e.g., "123.45 EUR | Original memo").</p>
+      </div>
+
+      <div class="rates-card">
+        <div class="rates-header">
+          <h2>Conversion Accounts</h2>
+          <button id="add-account-btn" class="sync-btn">+ Add Account</button>
+        </div>
+
+        <div id="accounts-loading" class="loading">Loading accounts...</div>
+        <div id="accounts-error" class="error" style="display: none;"></div>
+
+        <div id="accounts-table-container" style="display: none;">
+          <table class="rates-table">
+            <thead>
+              <tr>
+                <th>Budget</th>
+                <th>Account</th>
+                <th>Conversion</th>
+                <th>Status</th>
+                <th>Created</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody id="accounts-tbody">
+              <!-- Accounts will be loaded here -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Edit Account Modal -->
+  <div id="edit-modal" class="modal" style="display: none;">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2 id="modal-title">Add Conversion Account</h2>
+        <button class="modal-close" onclick="closeEditModal()">&times;</button>
+      </div>
+      <form id="edit-account-form">
+        <div class="form-group">
+          <label for="edit-budget-id">Budget</label>
+          <select id="edit-budget-id" required>
+            <option value="">Loading budgets...</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label for="edit-account-id">Account</label>
+          <select id="edit-account-id" required disabled>
+            <option value="">Select a budget first</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label for="edit-source-currency">Source Currency (imported as)</label>
+          <select id="edit-source-currency" required>
+            <option value="EUR">EUR</option>
+            <option value="USD">USD</option>
+            <option value="GBP">GBP</option>
+            <option value="RUB">RUB</option>
+            <option value="SGD">SGD</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label for="edit-target-currency">Target Currency (budget currency)</label>
+          <select id="edit-target-currency" required disabled>
+            <option value="">Select a budget first</option>
+          </select>
+        </div>
+        <div class="form-group" id="is-active-group" style="display: none;">
+          <label>
+            <input type="checkbox" id="edit-is-active" checked>
+            Active
+          </label>
+        </div>
+        <div class="modal-actions">
+          <button type="button" class="btn-secondary" onclick="closeEditModal()">Cancel</button>
+          <button type="submit" class="btn-primary">Save</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script src="/conversion.js"></script>
+</body>
+</html>

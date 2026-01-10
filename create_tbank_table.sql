@@ -66,3 +66,5 @@ COMMENT ON COLUMN tbank_transaction_mappings.tbank_currency IS 'Валюта о�
 COMMENT ON COLUMN tbank_transaction_mappings.sync_status IS 'Статус синхронизации: active, deleted, error';
 
 
+
+

@@ -177,6 +177,32 @@ class YnabService {
       return null;
     }
   }
+
+  // ===== Get Budgets =====
+  async getBudgets(): Promise<Array<{ id: string; name: string; currency_format: { iso_code: string } }>> {
+    try {
+      const response = await this.fetch<{ data: { budgets: Array<{ id: string; name: string; currency_format: { iso_code: string } }> } }>(
+        '/budgets'
+      );
+      return response.data.budgets;
+    } catch (error) {
+      logger.error('Error fetching budgets:', error);
+      return [];
+    }
+  }
+
+  // ===== Get Accounts =====
+  async getAccounts(budgetId: string): Promise<Array<{ id: string; name: string; type: string; closed: boolean }>> {
+    try {
+      const response = await this.fetch<{ data: { accounts: Array<{ id: string; name: string; type: string; closed: boolean }> } }>(
+        `/budgets/${budgetId}/accounts`
+      );
+      return response.data.accounts;
+    } catch (error) {
+      logger.error('Error fetching accounts:', error);
+      return [];
+    }
+  }
 }
 
 export const ynab = new YnabService();

@@ -218,12 +218,66 @@ export async function convertSgdToEur(
 }
 
 /**
+ * Конвертирует сумму из GBP в USD
+ * @param amountGbp Сумма в GBP (milliunits)
+ * @param date Дата транзакции (YYYY-MM-DD)
+ * @returns Сумма в USD (milliunits) или null если курс не найден
+ */
+export async function convertGbpToUsd(
+  amountGbp: number,
+  date: string
+): Promise<number | null> {
+  const month = date.substring(0, 7); // YYYY-MM
+  const rate = await supabase.getExchangeRateGbp(month);
+
+  if (!rate) {
+    logger.warn(`GBP/USD exchange rate not found for month ${month}`);
+    return null;
+  }
+
+  // amountGbp в milliunits
+  // умножаем на rate чтобы получить USD (1 GBP = X USD)
+  const amountUsd = Math.round(amountGbp * rate);
+
+  logger.debug(`Currency conversion: ${amountGbp} GBP milliunits -> ${amountUsd} USD milliunits (rate: ${rate})`);
+
+  return amountUsd;
+}
+
+/**
+ * Конвертирует сумму из USD в GBP
+ * @param amountUsd Сумма в USD (milliunits)
+ * @param date Дата транзакции (YYYY-MM-DD)
+ * @returns Сумма в GBP (milliunits) или null если курс не найден
+ */
+export async function convertUsdToGbp(
+  amountUsd: number,
+  date: string
+): Promise<number | null> {
+  const month = date.substring(0, 7); // YYYY-MM
+  const rate = await supabase.getExchangeRateGbp(month);
+
+  if (!rate) {
+    logger.warn(`GBP/USD exchange rate not found for month ${month}`);
+    return null;
+  }
+
+  // amountUsd в milliunits
+  // делим на rate чтобы получить GBP (1 GBP = X USD, поэтому USD / rate = GBP)
+  const amountGbp = Math.round(amountUsd / rate);
+
+  logger.debug(`Currency conversion: ${amountUsd} USD milliunits -> ${amountGbp} GBP milliunits (rate: ${rate})`);
+
+  return amountGbp;
+}
+
+/**
  * Форматирует milliunits в читаемую сумму
  * @param milliunits Сумма в milliunits (1000 = 1.00)
- * @param currency Валюта (EUR, USD, RUB или SGD)
+ * @param currency Валюта (EUR, USD, RUB, SGD или GBP)
  * @returns Отформатированная строка (например, "1.50 EUR")
  */
-export function formatAmount(milliunits: number, currency: 'EUR' | 'USD' | 'RUB' | 'SGD'): string {
+export function formatAmount(milliunits: number, currency: 'EUR' | 'USD' | 'RUB' | 'SGD' | 'GBP'): string {
   const amount = milliunits / 1000;
   return `${amount.toFixed(2)} ${currency}`;
 }
