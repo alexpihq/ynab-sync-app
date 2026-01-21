@@ -4,6 +4,8 @@ import { logger } from '../utils/logger.js';
 import {
   BudgetConfig,
   LoanAccount,
+  CompanyLoanAccount,
+  LinkedTransaction,
   TransactionMapping,
   SyncState,
   SyncLogEntry,
@@ -959,6 +961,323 @@ class SupabaseService {
     }
 
     return true;
+  }
+
+  // ===== Company Loan Accounts (Company ↔ Company) =====
+  async getCompanyLoanAccounts(): Promise<CompanyLoanAccount[]> {
+    const { data, error } = await this.client
+      .from('company_loan_accounts')
+      .select('*')
+      .eq('is_active', true);
+
+    if (error) {
+      logger.error('Error fetching company loan accounts:', error);
+      return [];
+    }
+
+    return data || [];
+  }
+
+  async getCompanyLoanAccountByAccountId(accountId: string): Promise<CompanyLoanAccount | null> {
+    // Check both sides of the relationship
+    const { data, error } = await this.client
+      .from('company_loan_accounts')
+      .select('*')
+      .eq('is_active', true)
+      .or(`account_id_1.eq.${accountId},account_id_2.eq.${accountId}`)
+      .single();
+
+    if (error && error.code !== 'PGRST116') {
+      logger.error('Error fetching company loan account:', error);
+    }
+
+    return data;
+  }
+
+  // ===== Linked Transactions =====
+  async getLinkedTransaction(transactionId: string): Promise<LinkedTransaction | null> {
+    // Check both sides
+    const { data, error } = await this.client
+      .from('linked_transactions')
+      .select('*')
+      .or(`transaction_id_1.eq.${transactionId},transaction_id_2.eq.${transactionId}`)
+      .single();
+
+    if (error && error.code !== 'PGRST116') {
+      logger.error('Error fetching linked transaction:', error);
+    }
+
+    return data;
+  }
+
+  async createLinkedTransaction(link: Omit<LinkedTransaction, 'id' | 'created_at' | 'updated_at'>): Promise<LinkedTransaction | null> {
+    const { data, error } = await this.client
+      .from('linked_transactions')
+      .insert(link)
+      .select()
+      .single();
+
+    if (error) {
+      logger.error('Error creating linked transaction:', error);
+      return null;
+    }
+
+    return data;
+  }
+
+  async findMatchingTransaction(
+    budgetId: string,
+    accountId: string,
+    amount: number,
+    date: string,
+    _dateTolerance: number = 2
+  ): Promise<any | null> {
+    // Find transactions in the target budget with matching amount and date (±tolerance days)
+    // This searches YNAB transactions via the client
+    // Returns the first matching transaction or null
+
+    // Note: This is a helper that should be called with YNAB client
+    // The actual implementation will be in sync.ts
+    logger.debug(`Looking for matching transaction: budget=${budgetId}, account=${accountId}, amount=${amount}, date=${date}`);
+    return null; // Placeholder - actual logic in sync.ts
+  }
+
+  async isTransactionLinked(transactionId: string): Promise<boolean> {
+    const link = await this.getLinkedTransaction(transactionId);
+    return link !== null;
+  }
+
+  async getAllLinkedTransactions(): Promise<LinkedTransaction[]> {
+    const { data, error } = await this.client
+      .from('linked_transactions')
+      .select('*')
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      logger.error('Error fetching all linked transactions:', error);
+      return [];
+    }
+
+    return data || [];
+  }
+
+  async getLinkedTransactionById(id: string): Promise<LinkedTransaction | null> {
+    const { data, error } = await this.client
+      .from('linked_transactions')
+      .select('*')
+      .eq('id', id)
+      .single();
+
+    if (error && error.code !== 'PGRST116') {
+      logger.error('Error fetching linked transaction by id:', error);
+    }
+
+    return data;
+  }
+
+  async updateLinkedTransaction(
+    id: string,
+    updates: Partial<Omit<LinkedTransaction, 'id' | 'created_at'>>
+  ): Promise<LinkedTransaction | null> {
+    const { data, error } = await this.client
+      .from('linked_transactions')
+      .update({ ...updates, updated_at: new Date().toISOString() })
+      .eq('id', id)
+      .select()
+      .single();
+
+    if (error) {
+      logger.error('Error updating linked transaction:', error);
+      return null;
+    }
+
+    return data;
+  }
+
+  async deleteLinkedTransaction(id: string): Promise<boolean> {
+    const { error } = await this.client
+      .from('linked_transactions')
+      .delete()
+      .eq('id', id);
+
+    if (error) {
+      logger.error('Error deleting linked transaction:', error);
+      return false;
+    }
+
+    return true;
+  }
+
+  // ===== Loan Accounts CRUD =====
+  async getAllLoanAccounts(): Promise<LoanAccount[]> {
+    const { data, error } = await this.client
+      .from('loan_accounts')
+      .select('*')
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      logger.error('Error fetching all loan accounts:', error);
+      return [];
+    }
+
+    return data || [];
+  }
+
+  async createLoanAccount(
+    loanAccount: Omit<LoanAccount, 'id' | 'created_at' | 'updated_at'>
+  ): Promise<LoanAccount | null> {
+    const { data, error } = await this.client
+      .from('loan_accounts')
+      .insert(loanAccount)
+      .select()
+      .single();
+
+    if (error) {
+      logger.error('Error creating loan account:', error);
+      return null;
+    }
+
+    return data;
+  }
+
+  async updateLoanAccount(
+    id: string,
+    updates: Partial<Omit<LoanAccount, 'id' | 'created_at'>>
+  ): Promise<LoanAccount | null> {
+    const { data, error } = await this.client
+      .from('loan_accounts')
+      .update({ ...updates, updated_at: new Date().toISOString() })
+      .eq('id', id)
+      .select()
+      .single();
+
+    if (error) {
+      logger.error('Error updating loan account:', error);
+      return null;
+    }
+
+    return data;
+  }
+
+  async deleteLoanAccount(id: string): Promise<boolean> {
+    const { error } = await this.client
+      .from('loan_accounts')
+      .delete()
+      .eq('id', id);
+
+    if (error) {
+      logger.error('Error deleting loan account:', error);
+      return false;
+    }
+
+    return true;
+  }
+
+  // ===== Company Loan Accounts CRUD =====
+  async getAllCompanyLoanAccounts(): Promise<CompanyLoanAccount[]> {
+    const { data, error } = await this.client
+      .from('company_loan_accounts')
+      .select('*')
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      logger.error('Error fetching all company loan accounts:', error);
+      return [];
+    }
+
+    return data || [];
+  }
+
+  async createCompanyLoanAccount(
+    loanAccount: Omit<CompanyLoanAccount, 'id' | 'created_at' | 'updated_at'>
+  ): Promise<CompanyLoanAccount | null> {
+    const { data, error } = await this.client
+      .from('company_loan_accounts')
+      .insert(loanAccount)
+      .select()
+      .single();
+
+    if (error) {
+      logger.error('Error creating company loan account:', error);
+      return null;
+    }
+
+    return data;
+  }
+
+  async updateCompanyLoanAccount(
+    id: string,
+    updates: Partial<Omit<CompanyLoanAccount, 'id' | 'created_at'>>
+  ): Promise<CompanyLoanAccount | null> {
+    const { data, error } = await this.client
+      .from('company_loan_accounts')
+      .update({ ...updates, updated_at: new Date().toISOString() })
+      .eq('id', id)
+      .select()
+      .single();
+
+    if (error) {
+      logger.error('Error updating company loan account:', error);
+      return null;
+    }
+
+    return data;
+  }
+
+  async deleteCompanyLoanAccount(id: string): Promise<boolean> {
+    const { error } = await this.client
+      .from('company_loan_accounts')
+      .delete()
+      .eq('id', id);
+
+    if (error) {
+      logger.error('Error deleting company loan account:', error);
+      return false;
+    }
+
+    return true;
+  }
+
+  async deleteTransactionMapping(mappingId: string): Promise<boolean> {
+    const { error } = await this.client
+      .from('transaction_mappings')
+      .delete()
+      .eq('id', mappingId);
+
+    if (error) {
+      logger.error('Error deleting transaction mapping:', error);
+      return false;
+    }
+
+    return true;
+  }
+
+  async getTransactionMappingByCompanyTxId(companyTxId: string): Promise<TransactionMapping | null> {
+    const { data, error } = await this.client
+      .from('transaction_mappings')
+      .select('*')
+      .eq('company_tx_id', companyTxId)
+      .single();
+
+    if (error && error.code !== 'PGRST116') {
+      logger.error('Error fetching transaction mapping by company tx id:', error);
+    }
+
+    return data;
+  }
+
+  async getTransactionMappingByPersonalTxId(personalTxId: string): Promise<TransactionMapping | null> {
+    const { data, error } = await this.client
+      .from('transaction_mappings')
+      .select('*')
+      .eq('personal_tx_id', personalTxId)
+      .single();
+
+    if (error && error.code !== 'PGRST116') {
+      logger.error('Error fetching transaction mapping by personal tx id:', error);
+    }
+
+    return data;
   }
 }
 

@@ -8,6 +8,7 @@ import {
   YnabTransactionDetail,
   SyncContext,
   LoanAccount,
+  CompanyLoanAccount,
   TransactionSyncDetail,
 } from '../types/index.js';
 
@@ -15,28 +16,6 @@ import {
  * Основной класс для синхронизации займов между бюджетами
  */
 export class SyncService {
-  /**
-   * Helper для создания записи о транзакции
-   */
-  private createTransactionDetail(
-    transaction: YnabTransactionDetail,
-    budget: string,
-    action: TransactionSyncDetail['action'],
-    mirrorId?: string,
-    details?: string
-  ): TransactionSyncDetail {
-    return {
-      transactionId: transaction.id,
-      date: transaction.date,
-      amount: transaction.amount,
-      payee: transaction.payee_name,
-      account: transaction.account_name,
-      budget,
-      action,
-      mirrorId,
-      details
-    };
-  }
   /**
    * Запускает один цикл синхронизации для всех бюджетов
    */
@@ -52,6 +31,15 @@ export class SyncService {
     const allTransactions: TransactionSyncDetail[] = [];
 
     try {
+      // ВАЖНО: syncCompanyToCompany должен выполняться ПЕРВЫМ,
+      // до того как другие sync'и обновят server_knowledge
+      const companyToCompanyStats = await this.syncCompanyToCompany(cycleId);
+      totalCreated += companyToCompanyStats.created;
+      totalUpdated += companyToCompanyStats.updated;
+      totalSkipped += companyToCompanyStats.skipped;
+      totalErrors += companyToCompanyStats.errors;
+      totalProcessed += companyToCompanyStats.processed;
+
       // Синхронизация личный → компании
       const personalStats = await this.syncPersonalToCompanies(cycleId);
       totalCreated += personalStats.created;
@@ -69,7 +57,6 @@ export class SyncService {
         totalSkipped += companyStats.skipped;
         totalErrors += companyStats.errors;
         totalProcessed += companyStats.processed;
-        allTransactions.push(...companyStats.transactions);
       }
 
       logger.info(`========== Sync cycle ${cycleId} completed ==========\n`);
@@ -160,8 +147,6 @@ export class SyncService {
     };
 
     logger.info(`Syncing ${context.budgetName} → Companies...`);
-    
-    const transactions: TransactionSyncDetail[] = [];
 
     try {
       // Получаем состояние синхронизации
@@ -247,6 +232,40 @@ export class SyncService {
           } else {
             skipped++;
           }
+          continue;
+        }
+
+        // Проверяем, не пришла ли уже банковская транзакция, которую мы должны были создать как mirror
+        // Это случай дедупликации: bank transfer пришел раньше/позже нашего mirror
+        const existingMirror = await this.findExistingMirrorInTarget(
+          loanAccount.company_budget_id,
+          loanAccount.company_account_id,
+          transaction.amount,
+          transaction.date,
+          'personal'
+        );
+
+        if (existingMirror) {
+          // Нашли существующий mirror — связываем и удаляем mirror
+          logger.info(`Found existing mirror ${existingMirror.id} for bank transaction ${transaction.id}, linking and removing mirror`);
+
+          const linked = await this.linkAndRemoveMirror(
+            context,
+            transaction,
+            existingMirror,
+            BUDGETS.PERSONAL.id,
+            loanAccount.company_budget_id,
+            loanAccount.personal_account_id,
+            loanAccount.company_account_id
+          );
+
+          if (linked) {
+            logger.info(`✅ Deduplication: linked ${transaction.id} ↔ bank tx, removed mirror ${existingMirror.id}`);
+            skipped++; // Не создали новый mirror
+          } else {
+            errors.push(`Failed to deduplicate transaction ${transaction.id}`);
+          }
+          processed++;
           continue;
         }
 
@@ -403,6 +422,39 @@ export class SyncService {
           continue;
         }
 
+        // Проверяем дедупликацию: не пришла ли банковская транзакция в Personal, для которой уже есть mirror
+        const existingMirror = await this.findExistingMirrorInTarget(
+          BUDGETS.PERSONAL.id,
+          loanAccount.personal_account_id,
+          transaction.amount,
+          transaction.date,
+          'company'
+        );
+
+        if (existingMirror) {
+          // Нашли существующий mirror — связываем и удаляем mirror
+          logger.info(`Found existing mirror ${existingMirror.id} for bank transaction ${transaction.id}, linking and removing mirror`);
+
+          const linked = await this.linkAndRemoveMirror(
+            context,
+            transaction,
+            existingMirror,
+            companyBudgetId,
+            BUDGETS.PERSONAL.id,
+            loanAccount.company_account_id,
+            loanAccount.personal_account_id
+          );
+
+          if (linked) {
+            logger.info(`✅ Deduplication: linked ${transaction.id} ↔ bank tx, removed mirror ${existingMirror.id}`);
+            skipped++;
+          } else {
+            errors.push(`Failed to deduplicate transaction ${transaction.id}`);
+          }
+          processed++;
+          continue;
+        }
+
         const success = await this.createMirrorTransaction(
           context,
           transaction,
@@ -434,11 +486,11 @@ export class SyncService {
         errors: errors.length,
       });
 
-      return { created, updated: 0, skipped, errors: errors.length, processed, transactions: [] };
+      return { created, updated: 0, skipped, errors: errors.length, processed };
 
     } catch (error: any) {
       logger.error(`Error syncing ${companyName}:`, error);
-      
+
       await supabase.updateSyncState(context.budgetId, {
         last_sync_status: 'error',
         last_error_message: error.message,
@@ -454,7 +506,413 @@ export class SyncService {
         error_message: error.message,
       });
 
-      return { created: 0, updated: 0, skipped: 0, errors: 1, processed: 0, transactions: [] };
+      return { created: 0, updated: 0, skipped: 0, errors: 1, processed: 0 };
+    }
+  }
+
+  /**
+   * Синхронизирует транзакции между компаниями (без конвертации валют)
+   */
+  private async syncCompanyToCompany(
+    cycleId: string
+  ): Promise<{ created: number; updated: number; skipped: number; errors: number; processed: number }> {
+    logger.info(`Syncing Company ↔ Company loans...`);
+
+    let totalCreated = 0;
+    let totalUpdated = 0;
+    let totalSkipped = 0;
+    let totalErrors = 0;
+    let totalProcessed = 0;
+
+    try {
+      // Получаем все company-to-company loan accounts
+      const companyLoanAccounts = await supabase.getCompanyLoanAccounts();
+
+      if (companyLoanAccounts.length === 0) {
+        logger.info('No company-to-company loan accounts configured');
+        return { created: 0, updated: 0, skipped: 0, errors: 0, processed: 0 };
+      }
+
+      logger.info(`Found ${companyLoanAccounts.length} company-to-company loan account pairs`);
+
+      // Для каждой пары компаний синхронизируем в обоих направлениях
+      for (const loanAccount of companyLoanAccounts) {
+        // Направление 1: Budget1 → Budget2
+        const stats1 = await this.syncCompanyPairDirection(
+          cycleId,
+          loanAccount,
+          loanAccount.budget_id_1,
+          loanAccount.budget_name_1,
+          loanAccount.account_id_1,
+          loanAccount.budget_id_2,
+          loanAccount.account_id_2
+        );
+        totalCreated += stats1.created;
+        totalUpdated += stats1.updated;
+        totalSkipped += stats1.skipped;
+        totalErrors += stats1.errors;
+        totalProcessed += stats1.processed;
+
+        // Направление 2: Budget2 → Budget1
+        const stats2 = await this.syncCompanyPairDirection(
+          cycleId,
+          loanAccount,
+          loanAccount.budget_id_2,
+          loanAccount.budget_name_2,
+          loanAccount.account_id_2,
+          loanAccount.budget_id_1,
+          loanAccount.account_id_1
+        );
+        totalCreated += stats2.created;
+        totalUpdated += stats2.updated;
+        totalSkipped += stats2.skipped;
+        totalErrors += stats2.errors;
+        totalProcessed += stats2.processed;
+      }
+
+      logger.info(`Company ↔ Company sync completed:`, {
+        created: totalCreated,
+        updated: totalUpdated,
+        skipped: totalSkipped,
+        errors: totalErrors,
+      });
+
+      return { created: totalCreated, updated: totalUpdated, skipped: totalSkipped, errors: totalErrors, processed: totalProcessed };
+
+    } catch (error: any) {
+      logger.error('Error in company-to-company sync:', error);
+      return { created: 0, updated: 0, skipped: 0, errors: 1, processed: 0 };
+    }
+  }
+
+  /**
+   * Синхронизирует одно направление для пары компаний
+   */
+  private async syncCompanyPairDirection(
+    cycleId: string,
+    loanAccount: CompanyLoanAccount,
+    sourceBudgetId: string,
+    sourceBudgetName: string,
+    sourceAccountId: string,
+    targetBudgetId: string,
+    targetAccountId: string
+  ): Promise<{ created: number; updated: number; skipped: number; errors: number; processed: number }> {
+    const context: SyncContext = {
+      runId: cycleId,
+      startTime: new Date(),
+      budgetId: sourceBudgetId,
+      budgetName: sourceBudgetName,
+    };
+
+    logger.info(`Syncing ${sourceBudgetName} → target company...`);
+
+    try {
+      const syncState = await supabase.getSyncState(sourceBudgetId);
+      if (!syncState) {
+        logger.warn(`Sync state not found for budget ${sourceBudgetId}, skipping`);
+        return { created: 0, updated: 0, skipped: 0, errors: 0, processed: 0 };
+      }
+
+      // Получаем транзакции из YNAB (используем существующий server_knowledge)
+      const { transactions } = await ynab.getTransactions(
+        sourceBudgetId,
+        config.syncStartDate,
+        syncState.last_server_knowledge
+      );
+
+      logger.info(`[CC] Fetched ${transactions.length} transactions from ${sourceBudgetName} (sk=${syncState.last_server_knowledge})`);
+
+      let processed = 0;
+      let created = 0;
+      let skipped = 0;
+      const errors: string[] = [];
+
+      for (const transaction of transactions) {
+        // Пропускаем удалённые
+        if (transaction.deleted) {
+          logger.debug(`Skipping deleted transaction ${transaction.id}`);
+          skipped++;
+          continue;
+        }
+
+        // Проверяем, принадлежит ли транзакция нужному аккаунту
+        if (transaction.account_id !== sourceAccountId) {
+          logger.info(`Skipping tx ${transaction.id.slice(0,8)}: account ${transaction.account_id.slice(0,8)} != ${sourceAccountId.slice(0,8)}`);
+          skipped++;
+          continue;
+        }
+
+        // Пропускаем зеркальные транзакции (созданные этим sync)
+        if (transaction.import_id?.startsWith('LOAN:')) {
+          logger.debug(`Skipping LOAN: mirror transaction ${transaction.id}`);
+          skipped++;
+          continue;
+        }
+
+        // Проверяем, не связана ли уже эта транзакция
+        const isLinked = await supabase.isTransactionLinked(transaction.id);
+        if (isLinked) {
+          logger.debug(`Transaction ${transaction.id} already linked, skipping`);
+          skipped++;
+          continue;
+        }
+
+        // Проверяем существующий mapping
+        const existingMapping = await supabase.getTransactionMapping(transaction.id);
+        if (existingMapping) {
+          // Проверяем, изменилась ли сумма
+          const currentAmount = Math.abs(transaction.amount);
+          const mappedAmount = Math.abs(existingMapping.personal_amount);
+
+          if (currentAmount !== mappedAmount) {
+            // Сумма изменилась — обновляем mirror
+            logger.info(`[CC] Amount changed for ${transaction.id.slice(0,8)}: ${mappedAmount/1000} → ${currentAmount/1000}`);
+
+            const mirrorTxId = existingMapping.company_tx_id;
+            const newMirrorAmount = -transaction.amount; // Инвертированная сумма
+
+            try {
+              await ynab.updateTransaction(targetBudgetId, mirrorTxId, {
+                amount: newMirrorAmount
+              });
+
+              // Обновляем mapping
+              await supabase.updateTransactionMapping(existingMapping.id, {
+                personal_amount: transaction.amount,
+                company_amount: newMirrorAmount
+              });
+
+              logger.info(`✅ [CC] Updated mirror ${mirrorTxId.slice(0,8)}: new amount ${newMirrorAmount/1000}`);
+              processed++;
+            } catch (error: any) {
+              logger.error(`Failed to update mirror for ${transaction.id}:`, error.message);
+              errors.push(`Failed to update mirror for ${transaction.id}`);
+            }
+          } else {
+            skipped++;
+          }
+          continue;
+        }
+
+        // Сначала проверяем дедупликацию: не пришла ли bank transaction, когда у нас уже есть LOAN:CC: mirror
+        const existingCCMirror = await this.findExistingCompanyMirrorInTarget(
+          targetBudgetId,
+          targetAccountId,
+          transaction.amount,
+          transaction.date
+        );
+
+        if (existingCCMirror) {
+          // Нашли существующий LOAN:CC: mirror — удаляем его, т.к. bank transaction пришла
+          logger.info(`Found existing LOAN:CC: mirror ${existingCCMirror.id} for bank tx ${transaction.id}, removing mirror`);
+
+          // Удаляем mirror
+          const deleted = await ynab.deleteTransaction(targetBudgetId, existingCCMirror.id);
+          if (deleted) {
+            logger.info(`✅ Deduplication: removed LOAN:CC: mirror ${existingCCMirror.id}`);
+          }
+
+          // Удаляем mapping если есть
+          const mirrorMapping = await supabase.getTransactionMappingByCompanyTxId(existingCCMirror.id)
+            || await supabase.getTransactionMappingByPersonalTxId(existingCCMirror.id);
+          if (mirrorMapping) {
+            await supabase.deleteTransactionMapping(mirrorMapping.id);
+          }
+        }
+
+        // Ищем matching транзакцию в целевом бюджете (auto-linking)
+        const matchingTx = await this.findMatchingTransactionInBudget(
+          targetBudgetId,
+          targetAccountId,
+          -transaction.amount, // Инвертированная сумма
+          transaction.date
+        );
+
+        if (matchingTx) {
+          // Нашли matching — связываем вместо создания зеркала
+          logger.info(`Found matching transaction ${matchingTx.id} for ${transaction.id}, linking instead of mirroring`);
+
+          await supabase.createLinkedTransaction({
+            budget_id_1: sourceBudgetId,
+            transaction_id_1: transaction.id,
+            account_id_1: sourceAccountId,
+            budget_id_2: targetBudgetId,
+            transaction_id_2: matchingTx.id,
+            account_id_2: targetAccountId,
+            amount: Math.abs(transaction.amount),
+            transaction_date: transaction.date,
+            link_type: 'bank_transfer',
+            link_reason: 'Auto-matched by amount and date',
+            is_auto_matched: true,
+          });
+
+          logger.info(`✅ Linked transactions: ${transaction.id} ↔ ${matchingTx.id}`);
+          skipped++; // Считаем как skipped, т.к. зеркало не создали
+          processed++;
+          continue;
+        }
+
+        // Нет matching — создаём зеркальную транзакцию (без конвертации)
+        const success = await this.createCompanyMirrorTransaction(
+          context,
+          transaction,
+          loanAccount,
+          targetBudgetId,
+          targetAccountId
+        );
+
+        if (success) {
+          created++;
+        } else {
+          errors.push(`Failed to mirror transaction ${transaction.id}`);
+        }
+
+        processed++;
+      }
+
+      return { created, updated: 0, skipped, errors: errors.length, processed };
+
+    } catch (error: any) {
+      logger.error(`Error syncing company pair direction:`, error);
+      return { created: 0, updated: 0, skipped: 0, errors: 1, processed: 0 };
+    }
+  }
+
+  /**
+   * Ищет matching транзакцию в целевом бюджете по сумме и дате
+   */
+  private async findMatchingTransactionInBudget(
+    budgetId: string,
+    accountId: string,
+    amount: number,
+    date: string,
+    toleranceDays: number = 2
+  ): Promise<YnabTransactionDetail | null> {
+    try {
+      // Получаем транзакции за последние N дней
+      const startDate = new Date(date);
+      startDate.setDate(startDate.getDate() - toleranceDays);
+      const startDateStr = startDate.toISOString().split('T')[0];
+
+      const { transactions } = await ynab.getTransactions(budgetId, startDateStr);
+
+      // Ищем matching по аккаунту, сумме и дате
+      for (const tx of transactions) {
+        if (tx.deleted) continue;
+        if (tx.account_id !== accountId) continue;
+        if (tx.import_id?.startsWith('LOAN:')) continue; // Пропускаем зеркала
+
+        // Проверяем сумму (точное совпадение)
+        if (tx.amount !== amount) continue;
+
+        // Проверяем дату (±toleranceDays)
+        const txDate = new Date(tx.date);
+        const sourceDate = new Date(date);
+        const diffDays = Math.abs((txDate.getTime() - sourceDate.getTime()) / (1000 * 60 * 60 * 24));
+
+        if (diffDays <= toleranceDays) {
+          // Проверяем, не связана ли уже эта транзакция
+          const isLinked = await supabase.isTransactionLinked(tx.id);
+          if (!isLinked) {
+            return tx;
+          }
+        }
+      }
+
+      return null;
+    } catch (error: any) {
+      logger.error('Error finding matching transaction:', error);
+      return null;
+    }
+  }
+
+  /**
+   * Создает зеркальную транзакцию между компаниями (без конвертации валют)
+   */
+  private async createCompanyMirrorTransaction(
+    context: SyncContext,
+    sourceTx: YnabTransactionDetail,
+    loanAccount: CompanyLoanAccount,
+    targetBudgetId: string,
+    targetAccountId: string
+  ): Promise<boolean> {
+    try {
+      logger.info(`Creating company mirror transaction for ${sourceTx.id}...`);
+
+      // Без конвертации — просто инвертируем сумму
+      const mirrorAmount = -sourceTx.amount;
+
+      // Формируем import_id
+      const uuid = sourceTx.id.replace(/-/g, '');
+      const shortId = uuid.substring(0, 16) + uuid.substring(24);
+      const importId = `LOAN:CC:${shortId}`; // CC = Company-to-Company
+
+      // Формируем memo
+      const memo = sourceTx.memo
+        ? `${sourceTx.memo} | Company Sync`
+        : 'Company Loan Sync';
+
+      // Создаем транзакцию в YNAB
+      const mirrorTx = await ynab.createTransaction(targetBudgetId, {
+        account_id: targetAccountId,
+        date: sourceTx.date,
+        amount: mirrorAmount,
+        payee_name: undefined,
+        memo: memo.substring(0, 500),
+        cleared: 'cleared',
+        approved: false,
+        import_id: importId,
+      });
+
+      if (!mirrorTx) {
+        logger.error(`Failed to create company mirror transaction in YNAB`);
+        return false;
+      }
+
+      // Сохраняем mapping (используем существующую таблицу, но с exchange_rate = 1)
+      const mapping = await supabase.createTransactionMapping({
+        company_budget_id: targetBudgetId, // Используем target как "company" в mapping
+        personal_tx_id: sourceTx.id, // Source transaction
+        company_tx_id: mirrorTx.id, // Mirror transaction
+        personal_amount: sourceTx.amount,
+        company_amount: mirrorAmount,
+        exchange_rate: 1, // Нет конвертации
+        transaction_date: sourceTx.date,
+        source_budget: 'company', // Источник — компания
+        sync_status: 'active',
+        error_message: null,
+      });
+
+      if (!mapping) {
+        logger.warn(`Failed to create transaction mapping, but mirror was created`);
+      }
+
+      await supabase.logSync({
+        sync_run_id: context.runId,
+        budget_id: context.budgetId,
+        action: 'create',
+        transaction_id: sourceTx.id,
+        mirror_transaction_id: mirrorTx.id,
+        details: {
+          type: 'company_to_company',
+          source_amount: sourceTx.amount,
+          mirror_amount: mirrorAmount,
+          loan_account: `${loanAccount.budget_name_1} ↔ ${loanAccount.budget_name_2}`,
+        },
+        error_message: null,
+      });
+
+      logger.info(`✅ Created company mirror transaction:`, {
+        source: sourceTx.id,
+        mirror: mirrorTx.id,
+        amount: formatAmount(mirrorAmount, 'USD'),
+      });
+
+      return true;
+
+    } catch (error: any) {
+      logger.error(`Error creating company mirror transaction:`, error);
+      return false;
     }
   }
 
@@ -1057,6 +1515,234 @@ export class SyncService {
 
     } catch (error: any) {
       logger.error(`Error handling deleted transaction:`, error);
+    }
+  }
+
+  /**
+   * Находит существующую LOAN:CC: транзакцию в целевом бюджете (company-to-company, без конвертации)
+   * Используется для дедупликации между компаниями с одинаковой валютой
+   */
+  private async findExistingCompanyMirrorInTarget(
+    targetBudgetId: string,
+    targetAccountId: string,
+    sourceAmount: number,
+    sourceDate: string,
+    toleranceDays: number = 2
+  ): Promise<YnabTransactionDetail | null> {
+    try {
+      const startDate = new Date(sourceDate);
+      startDate.setDate(startDate.getDate() - toleranceDays);
+      const startDateStr = startDate.toISOString().split('T')[0];
+
+      const { transactions } = await ynab.getTransactions(targetBudgetId, startDateStr);
+
+      // Ищем LOAN:CC: mirror с matching суммой (инвертированной) и датой
+      const expectedMirrorAmount = -sourceAmount;
+
+      for (const tx of transactions) {
+        if (tx.deleted) continue;
+        if (tx.account_id !== targetAccountId) continue;
+        if (!tx.import_id?.startsWith('LOAN:CC:')) continue; // Только company-to-company mirrors
+
+        // Проверяем сумму (точное совпадение, т.к. нет конвертации)
+        if (tx.amount !== expectedMirrorAmount) continue;
+
+        // Проверяем дату (±toleranceDays)
+        const txDate = new Date(tx.date);
+        const srcDate = new Date(sourceDate);
+        const diffDays = Math.abs((txDate.getTime() - srcDate.getTime()) / (1000 * 60 * 60 * 24));
+
+        if (diffDays <= toleranceDays) {
+          logger.info(`Found matching LOAN:CC: mirror for deduplication: ${tx.id}, amount=${tx.amount}, date=${tx.date}`);
+          return tx;
+        }
+      }
+
+      return null;
+    } catch (error: any) {
+      logger.error('Error finding existing company mirror in target:', error);
+      return null;
+    }
+  }
+
+  /**
+   * Находит существующую LOAN: транзакцию в целевом бюджете, которая соответствует bank transaction
+   * Это нужно для дедупликации: если bank transfer пришел, а у нас уже есть mirror
+   */
+  private async findExistingMirrorInTarget(
+    targetBudgetId: string,
+    targetAccountId: string,
+    sourceAmount: number,
+    sourceDate: string,
+    sourceType: 'personal' | 'company',
+    toleranceDays: number = 2
+  ): Promise<YnabTransactionDetail | null> {
+    try {
+      // Получаем транзакции из целевого бюджета за период
+      const startDate = new Date(sourceDate);
+      startDate.setDate(startDate.getDate() - toleranceDays);
+      const startDateStr = startDate.toISOString().split('T')[0];
+
+      const { transactions } = await ynab.getTransactions(targetBudgetId, startDateStr);
+
+      // Конвертируем сумму для сравнения (с учетом направления и валюты)
+      // Для Personal → Company: EUR → USD
+      // Для Company → Personal: USD → EUR
+      let expectedMirrorAmount: number | null;
+
+      if (sourceType === 'personal') {
+        // Personal (EUR) → Company (USD): конвертируем EUR в USD и инвертируем
+        expectedMirrorAmount = await convertEurToUsd(sourceAmount, sourceDate);
+        if (expectedMirrorAmount !== null) {
+          expectedMirrorAmount = -expectedMirrorAmount;
+        }
+      } else {
+        // Company (USD) → Personal (EUR): конвертируем USD в EUR и инвертируем
+        expectedMirrorAmount = await convertUsdToEur(sourceAmount, sourceDate);
+        if (expectedMirrorAmount !== null) {
+          expectedMirrorAmount = -expectedMirrorAmount;
+        }
+      }
+
+      if (expectedMirrorAmount === null) {
+        logger.warn(`Cannot convert amount for deduplication check, skipping`);
+        return null;
+      }
+
+      // Ищем LOAN: mirror с matching суммой и датой
+      for (const tx of transactions) {
+        if (tx.deleted) continue;
+        if (tx.account_id !== targetAccountId) continue;
+        if (!tx.import_id?.startsWith('LOAN:')) continue; // Ищем только наши mirror
+
+        // Проверяем сумму (с небольшим допуском из-за округления конвертации)
+        const amountDiff = Math.abs(tx.amount - expectedMirrorAmount);
+        const amountTolerance = Math.abs(expectedMirrorAmount * 0.01); // 1% tolerance
+        if (amountDiff > amountTolerance) continue;
+
+        // Проверяем дату (±toleranceDays)
+        const txDate = new Date(tx.date);
+        const srcDate = new Date(sourceDate);
+        const diffDays = Math.abs((txDate.getTime() - srcDate.getTime()) / (1000 * 60 * 60 * 24));
+
+        if (diffDays <= toleranceDays) {
+          logger.info(`Found matching LOAN: mirror for deduplication: ${tx.id}, amount=${tx.amount}, date=${tx.date}`);
+          return tx;
+        }
+      }
+
+      return null;
+    } catch (error: any) {
+      logger.error('Error finding existing mirror in target:', error);
+      return null;
+    }
+  }
+
+  /**
+   * Связывает bank transaction с источником и удаляет mirror
+   * Это дедупликация: bank transfer пришел → удаляем наш mirror, связываем реальные транзакции
+   */
+  private async linkAndRemoveMirror(
+    context: SyncContext,
+    sourceTx: YnabTransactionDetail,
+    mirrorTx: YnabTransactionDetail,
+    sourceBudgetId: string,
+    targetBudgetId: string,
+    sourceAccountId: string,
+    targetAccountId: string
+  ): Promise<boolean> {
+    try {
+      // 1. Находим mapping для mirror транзакции
+      const mapping = await supabase.getTransactionMappingByCompanyTxId(mirrorTx.id)
+        || await supabase.getTransactionMappingByPersonalTxId(mirrorTx.id);
+
+      if (!mapping) {
+        logger.warn(`No mapping found for mirror ${mirrorTx.id}, cannot deduplicate properly`);
+        // Всё равно пробуем создать link
+      }
+
+      // 2. Ищем банковскую транзакцию в target budget, которая соответствует source
+      // Это транзакция БЕЗ LOAN: prefix с matching суммой
+      const { transactions } = await ynab.getTransactions(targetBudgetId, sourceTx.date);
+
+      let bankTxInTarget: YnabTransactionDetail | null = null;
+      for (const tx of transactions) {
+        if (tx.deleted) continue;
+        if (tx.account_id !== targetAccountId) continue;
+        if (tx.import_id?.startsWith('LOAN:')) continue; // Пропускаем наши mirror
+        if (tx.id === mirrorTx.id) continue;
+
+        // Ищем транзакцию с похожей суммой (инвертированной и конвертированной)
+        const amountDiff = Math.abs(tx.amount - mirrorTx.amount);
+        const amountTolerance = Math.abs(mirrorTx.amount * 0.02); // 2% tolerance
+
+        if (amountDiff <= amountTolerance) {
+          const txDate = new Date(tx.date);
+          const srcDate = new Date(sourceTx.date);
+          const diffDays = Math.abs((txDate.getTime() - srcDate.getTime()) / (1000 * 60 * 60 * 24));
+
+          if (diffDays <= 3) {
+            bankTxInTarget = tx;
+            break;
+          }
+        }
+      }
+
+      // 3. Удаляем mirror транзакцию из YNAB
+      const deleted = await ynab.deleteTransaction(targetBudgetId, mirrorTx.id);
+      if (!deleted) {
+        logger.error(`Failed to delete mirror transaction ${mirrorTx.id}`);
+        return false;
+      }
+      logger.info(`Deleted mirror transaction ${mirrorTx.id}`);
+
+      // 4. Удаляем mapping
+      if (mapping) {
+        await supabase.deleteTransactionMapping(mapping.id);
+        logger.info(`Deleted transaction mapping ${mapping.id}`);
+      }
+
+      // 5. Создаём link между source и bank transaction в target (если нашли)
+      if (bankTxInTarget) {
+        await supabase.createLinkedTransaction({
+          budget_id_1: sourceBudgetId,
+          transaction_id_1: sourceTx.id,
+          account_id_1: sourceAccountId,
+          budget_id_2: targetBudgetId,
+          transaction_id_2: bankTxInTarget.id,
+          account_id_2: targetAccountId,
+          amount: Math.abs(sourceTx.amount),
+          transaction_date: sourceTx.date,
+          link_type: 'bank_transfer',
+          link_reason: 'Deduplication: bank transfer replaced LOAN mirror',
+          is_auto_matched: true,
+        });
+        logger.info(`Created link: ${sourceTx.id} ↔ ${bankTxInTarget.id}`);
+      } else {
+        // Если bank transaction не нашли, просто логируем
+        logger.info(`Bank transaction not found in target, mirror removed without linking`);
+      }
+
+      // 6. Логируем
+      await supabase.logSync({
+        sync_run_id: context.runId,
+        budget_id: context.budgetId,
+        action: 'delete',
+        transaction_id: sourceTx.id,
+        mirror_transaction_id: mirrorTx.id,
+        details: {
+          reason: 'deduplication',
+          bank_tx_found: !!bankTxInTarget,
+          bank_tx_id: bankTxInTarget?.id,
+        },
+        error_message: null,
+      });
+
+      return true;
+
+    } catch (error: any) {
+      logger.error('Error in linkAndRemoveMirror:', error);
+      return false;
     }
   }
 }

@@ -52,9 +52,12 @@
           <button class="sync-btn" onclick="runSync('all')">
             🔄 Run All Syncs
           </button>
-          <button class="sync-btn secondary" onclick="runSync('ynab')">
-            💰 YNAB ↔ YNAB
-          </button>
+          <div class="btn-with-sublink">
+            <button class="sync-btn secondary" onclick="runSync('ynab')">
+              💰 YNAB ↔ YNAB
+            </button>
+            <a href="/linked-transactions.html" class="sub-link">🔗 Linked Transactions</a>
+          </div>
           <button class="sync-btn secondary" onclick="runSync('finolog')">
             💼 Finolog → YNAB
           </button>
@@ -90,7 +93,15 @@
       <div id="sync-logs-container" class="logs-card" style="display: none;">
         <div class="logs-header">
           <h2>📋 Sync Logs (Real-time)</h2>
-          <button id="clear-logs-btn" class="clear-logs-btn">Clear</button>
+          <div class="logs-header-buttons">
+            <button id="copy-logs-btn" class="copy-logs-btn" onclick="copyLogs()" title="Copy logs to clipboard">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+              </svg>
+            </button>
+            <button id="clear-logs-btn" class="clear-logs-btn">Clear</button>
+          </div>
         </div>
         <div id="sync-logs" class="logs-content"></div>
       </div>

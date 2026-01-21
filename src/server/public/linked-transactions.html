@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Linked Transactions - YNAB Sync</title>
+  <link rel="stylesheet" href="/styles.css">
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body>
+  <div id="linked-page" class="page">
+    <div class="dashboard">
+      <header>
+        <h1>🔗 Linked Transactions</h1>
+        <div class="header-buttons">
+          <button onclick="window.location.href='/'" class="rates-btn">← Back to Dashboard</button>
+          <button id="logout-btn" class="logout-btn">Logout</button>
+        </div>
+      </header>
+
+      <div class="tabs">
+        <button class="tab-btn active" onclick="switchTab('linked')">🔗 Linked Transactions</button>
+        <button class="tab-btn" onclick="switchTab('sync-accounts')">⚙️ Sync Accounts</button>
+      </div>
+
+      <!-- Linked Transactions Tab -->
+      <div id="tab-linked" class="tab-content active">
+        <div class="linked-card">
+          <div class="linked-header">
+            <h2>Matched Bank Transfers</h2>
+            <p style="color: #666; font-size: 14px;">These transactions are linked and won't create duplicate mirrors</p>
+          </div>
+
+          <div id="linked-loading" class="loading">Loading linked transactions...</div>
+          <div id="linked-error" class="error" style="display: none;"></div>
+
+          <div id="linked-table-container" style="display: none;">
+            <table class="linked-table">
+              <thead>
+                <tr>
+                  <th>Date</th>
+                  <th>Budget 1</th>
+                  <th>Budget 2</th>
+                  <th>Amount</th>
+                  <th>Type</th>
+                  <th>Auto</th>
+                  <th>Reason</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody id="linked-tbody">
+              </tbody>
+            </table>
+          </div>
+
+          <div id="linked-empty" class="empty-state" style="display: none;">
+            <div class="empty-state-icon">🔗</div>
+            <p>No linked transactions yet</p>
+            <p style="font-size: 13px; margin-top: 10px;">Links are created automatically when bank transfers are detected</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Sync Accounts Tab (combined) -->
+      <div id="tab-sync-accounts" class="tab-content">
+        <!-- Personal ↔ Company Section -->
+        <div class="linked-card">
+          <div class="linked-header">
+            <h2>💰 Personal ↔ Company</h2>
+            <button id="add-loan-btn" class="sync-btn">+ Add</button>
+          </div>
+          <p style="color: #666; font-size: 13px; margin-bottom: 15px;">Sync loan transactions between Personal EUR budget and Company USD budgets (with currency conversion)</p>
+
+          <div id="loan-loading" class="loading">Loading...</div>
+          <div id="loan-error" class="error" style="display: none;"></div>
+
+          <div id="loan-table-container" style="display: none;">
+            <table class="linked-table">
+              <thead>
+                <tr>
+                  <th>Company Budget</th>
+                  <th>Personal Account</th>
+                  <th>Company Account</th>
+                  <th>Status</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody id="loan-tbody">
+              </tbody>
+            </table>
+          </div>
+
+          <div id="loan-empty" class="empty-state" style="display: none;">
+            <div class="empty-state-icon">💰</div>
+            <p>No personal-company loan accounts configured</p>
+          </div>
+        </div>
+
+        <!-- Company ↔ Company Section -->
+        <div class="linked-card" style="margin-top: 20px;">
+          <div class="linked-header">
+            <h2>🏢 Company ↔ Company</h2>
+            <button id="add-company-loan-btn" class="sync-btn">+ Add</button>
+          </div>
+          <p style="color: #666; font-size: 13px; margin-bottom: 15px;">Sync loan transactions between company budgets (same currency, no conversion)</p>
+
+          <div id="company-loan-loading" class="loading">Loading...</div>
+          <div id="company-loan-error" class="error" style="display: none;"></div>
+
+          <div id="company-loan-table-container" style="display: none;">
+            <table class="linked-table">
+              <thead>
+                <tr>
+                  <th>Company 1</th>
+                  <th>Company 2</th>
+                  <th>Currency</th>
+                  <th>Status</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody id="company-loan-tbody">
+              </tbody>
+            </table>
+          </div>
+
+          <div id="company-loan-empty" class="empty-state" style="display: none;">
+            <div class="empty-state-icon">🏢</div>
+            <p>No company-to-company loan accounts configured</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Delete Confirmation Modal -->
+  <div id="delete-modal" class="modal" style="display: none;">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2>Confirm Delete</h2>
+        <button class="modal-close" onclick="closeDeleteModal()">&times;</button>
+      </div>
+      <p id="delete-message">Are you sure you want to delete this item?</p>
+      <div class="modal-actions">
+        <button type="button" class="btn-secondary" onclick="closeDeleteModal()">Cancel</button>
+        <button type="button" class="btn-delete" id="confirm-delete-btn">Delete</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Add/Edit Loan Account Modal -->
+  <div id="loan-modal" class="modal" style="display: none;">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2 id="loan-modal-title">Add Loan Account</h2>
+        <button class="modal-close" onclick="closeLoanModal()">&times;</button>
+      </div>
+      <form id="loan-form">
+        <input type="hidden" id="loan-id">
+        <div class="form-group">
+          <label for="loan-company">Company Budget</label>
+          <select id="loan-company" required>
+            <option value="">Select company...</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label for="loan-personal-account">Personal Account</label>
+          <select id="loan-personal-account" required>
+            <option value="">Select account...</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label for="loan-company-account">Company Account</label>
+          <select id="loan-company-account" required>
+            <option value="">Select account...</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>
+            <input type="checkbox" id="loan-active" checked>
+            Active
+          </label>
+        </div>
+        <div class="modal-actions">
+          <button type="button" class="btn-secondary" onclick="closeLoanModal()">Cancel</button>
+          <button type="submit" class="btn-primary">Save</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Add/Edit Company Loan Modal -->
+  <div id="company-loan-modal" class="modal" style="display: none;">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2 id="company-loan-modal-title">Add Company Loan Account</h2>
+        <button class="modal-close" onclick="closeCompanyLoanModal()">&times;</button>
+      </div>
+      <form id="company-loan-form">
+        <input type="hidden" id="company-loan-id">
+        <div class="form-group">
+          <label for="company-loan-budget1">Company 1</label>
+          <select id="company-loan-budget1" required>
+            <option value="">Select company...</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label for="company-loan-account1">Account 1</label>
+          <select id="company-loan-account1" required>
+            <option value="">Select account...</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label for="company-loan-budget2">Company 2</label>
+          <select id="company-loan-budget2" required>
+            <option value="">Select company...</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label for="company-loan-account2">Account 2</label>
+          <select id="company-loan-account2" required>
+            <option value="">Select account...</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label for="company-loan-currency">Currency</label>
+          <select id="company-loan-currency" required>
+            <option value="USD">USD</option>
+            <option value="EUR">EUR</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>
+            <input type="checkbox" id="company-loan-active" checked>
+            Active
+          </label>
+        </div>
+        <div class="modal-actions">
+          <button type="button" class="btn-secondary" onclick="closeCompanyLoanModal()">Cancel</button>
+          <button type="submit" class="btn-primary">Save</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script src="/linked-transactions.js"></script>
+</body>
+</html>

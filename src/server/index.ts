@@ -512,6 +512,294 @@ app.delete('/api/conversion-accounts/:id', requireAuth, async (req, res) => {
   }
 });
 
+// ===== Linked Transactions endpoints =====
+// These are bank transfers that match mirror transactions (preventing duplicate creation)
+app.get('/api/linked-transactions', requireAuth, async (req, res) => {
+  try {
+    const transactions = await supabase.getAllLinkedTransactions();
+    res.json({ success: true, data: transactions });
+  } catch (error: any) {
+    logger.error('Error fetching linked transactions:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+app.get('/api/linked-transactions/:id', requireAuth, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const transaction = await supabase.getLinkedTransactionById(id);
+
+    if (!transaction) {
+      return res.status(404).json({ success: false, error: 'Linked transaction not found' });
+    }
+
+    res.json({ success: true, data: transaction });
+  } catch (error: any) {
+    logger.error('Error fetching linked transaction:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+app.post('/api/linked-transactions', requireAuth, async (req, res) => {
+  try {
+    const {
+      budget_id_1,
+      transaction_id_1,
+      account_id_1,
+      budget_id_2,
+      transaction_id_2,
+      account_id_2,
+      amount,
+      transaction_date,
+      link_type,
+      link_reason,
+      is_auto_matched
+    } = req.body;
+
+    if (!budget_id_1 || !transaction_id_1 || !account_id_1 ||
+        !budget_id_2 || !transaction_id_2 || !account_id_2 ||
+        amount === undefined || !transaction_date) {
+      return res.status(400).json({
+        success: false,
+        error: 'Missing required fields'
+      });
+    }
+
+    const transaction = await supabase.createLinkedTransaction({
+      budget_id_1,
+      transaction_id_1,
+      account_id_1,
+      budget_id_2,
+      transaction_id_2,
+      account_id_2,
+      amount,
+      transaction_date,
+      link_type: link_type || 'manual',
+      link_reason: link_reason || null,
+      is_auto_matched: is_auto_matched || false
+    });
+
+    if (!transaction) {
+      return res.status(500).json({ success: false, error: 'Failed to create linked transaction' });
+    }
+
+    res.json({ success: true, data: transaction });
+  } catch (error: any) {
+    logger.error('Error creating linked transaction:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+app.put('/api/linked-transactions/:id', requireAuth, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const updates = req.body;
+
+    const transaction = await supabase.updateLinkedTransaction(id, updates);
+
+    if (!transaction) {
+      return res.status(500).json({ success: false, error: 'Failed to update linked transaction' });
+    }
+
+    res.json({ success: true, data: transaction });
+  } catch (error: any) {
+    logger.error('Error updating linked transaction:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+app.delete('/api/linked-transactions/:id', requireAuth, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const success = await supabase.deleteLinkedTransaction(id);
+
+    if (!success) {
+      return res.status(500).json({ success: false, error: 'Failed to delete linked transaction' });
+    }
+
+    res.json({ success: true });
+  } catch (error: any) {
+    logger.error('Error deleting linked transaction:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// ===== Loan Accounts endpoints (Personal ↔ Company) =====
+app.get('/api/loan-accounts', requireAuth, async (req, res) => {
+  try {
+    const accounts = await supabase.getAllLoanAccounts();
+    res.json({ success: true, data: accounts });
+  } catch (error: any) {
+    logger.error('Error fetching loan accounts:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+app.post('/api/loan-accounts', requireAuth, async (req, res) => {
+  try {
+    const {
+      company_budget_id,
+      company_name,
+      personal_account_id,
+      personal_account_name,
+      company_account_id,
+      company_account_name,
+      is_active
+    } = req.body;
+
+    if (!company_budget_id || !personal_account_id || !company_account_id) {
+      return res.status(400).json({
+        success: false,
+        error: 'Missing required fields: company_budget_id, personal_account_id, company_account_id'
+      });
+    }
+
+    const account = await supabase.createLoanAccount({
+      company_budget_id,
+      company_name: company_name || '',
+      personal_account_id,
+      personal_account_name: personal_account_name || '',
+      company_account_id,
+      company_account_name: company_account_name || '',
+      is_active: is_active !== false
+    });
+
+    if (!account) {
+      return res.status(500).json({ success: false, error: 'Failed to create loan account' });
+    }
+
+    res.json({ success: true, data: account });
+  } catch (error: any) {
+    logger.error('Error creating loan account:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+app.put('/api/loan-accounts/:id', requireAuth, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const updates = req.body;
+
+    const account = await supabase.updateLoanAccount(id, updates);
+
+    if (!account) {
+      return res.status(500).json({ success: false, error: 'Failed to update loan account' });
+    }
+
+    res.json({ success: true, data: account });
+  } catch (error: any) {
+    logger.error('Error updating loan account:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+app.delete('/api/loan-accounts/:id', requireAuth, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const success = await supabase.deleteLoanAccount(id);
+
+    if (!success) {
+      return res.status(500).json({ success: false, error: 'Failed to delete loan account' });
+    }
+
+    res.json({ success: true });
+  } catch (error: any) {
+    logger.error('Error deleting loan account:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// ===== Company Loan Accounts endpoints (Company ↔ Company) =====
+app.get('/api/company-loan-accounts', requireAuth, async (req, res) => {
+  try {
+    const accounts = await supabase.getAllCompanyLoanAccounts();
+    res.json({ success: true, data: accounts });
+  } catch (error: any) {
+    logger.error('Error fetching company loan accounts:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+app.post('/api/company-loan-accounts', requireAuth, async (req, res) => {
+  try {
+    const {
+      budget_id_1,
+      budget_name_1,
+      account_id_1,
+      account_name_1,
+      budget_id_2,
+      budget_name_2,
+      account_id_2,
+      account_name_2,
+      currency,
+      is_active
+    } = req.body;
+
+    if (!budget_id_1 || !account_id_1 || !budget_id_2 || !account_id_2) {
+      return res.status(400).json({
+        success: false,
+        error: 'Missing required fields: budget_id_1, account_id_1, budget_id_2, account_id_2'
+      });
+    }
+
+    const account = await supabase.createCompanyLoanAccount({
+      budget_id_1,
+      budget_name_1: budget_name_1 || '',
+      account_id_1,
+      account_name_1: account_name_1 || '',
+      budget_id_2,
+      budget_name_2: budget_name_2 || '',
+      account_id_2,
+      account_name_2: account_name_2 || '',
+      currency: currency || 'USD',
+      is_active: is_active !== false
+    });
+
+    if (!account) {
+      return res.status(500).json({ success: false, error: 'Failed to create company loan account' });
+    }
+
+    res.json({ success: true, data: account });
+  } catch (error: any) {
+    logger.error('Error creating company loan account:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+app.put('/api/company-loan-accounts/:id', requireAuth, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const updates = req.body;
+
+    const account = await supabase.updateCompanyLoanAccount(id, updates);
+
+    if (!account) {
+      return res.status(500).json({ success: false, error: 'Failed to update company loan account' });
+    }
+
+    res.json({ success: true, data: account });
+  } catch (error: any) {
+    logger.error('Error updating company loan account:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+app.delete('/api/company-loan-accounts/:id', requireAuth, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const success = await supabase.deleteCompanyLoanAccount(id);
+
+    if (!success) {
+      return res.status(500).json({ success: false, error: 'Failed to delete company loan account' });
+    }
+
+    res.json({ success: true });
+  } catch (error: any) {
+    logger.error('Error deleting company loan account:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
 // Sync functions
 async function runFullSync() {
   if (syncState.isRunning) {

@@ -81,6 +81,41 @@ export interface LoanAccount {
   updated_at: string;
 }
 
+// Company-to-company loan account (same currency, no conversion)
+export interface CompanyLoanAccount {
+  id: string;
+  budget_id_1: string;
+  budget_name_1: string;
+  account_id_1: string;
+  account_name_1: string;
+  budget_id_2: string;
+  budget_name_2: string;
+  account_id_2: string;
+  account_name_2: string;
+  currency: string;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+// Linked transactions (two transactions representing the same money movement)
+export interface LinkedTransaction {
+  id: string;
+  budget_id_1: string;
+  transaction_id_1: string;
+  account_id_1: string;
+  budget_id_2: string;
+  transaction_id_2: string;
+  account_id_2: string;
+  amount: number;
+  transaction_date: string;
+  link_type: 'bank_transfer' | 'manual';
+  link_reason: string | null;
+  is_auto_matched: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface ExchangeRate {
   month: string; // YYYY-MM
   eur_to_usd: number;
@@ -144,6 +179,7 @@ export interface AppConfig {
   personalBudgetId: string;
   innerlyBudgetId: string;
   vibeconBudgetId: string;
+  epicWeb3BudgetId: string;
   syncIntervalMinutes: number;
   logLevel: 'debug' | 'info' | 'warn' | 'error';
   syncStartDate: string; // YYYY-MM-DD
