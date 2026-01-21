@@ -185,8 +185,10 @@ window.openLinkedModal = async function() {
   document.getElementById('linked-id').value = '';
   document.getElementById('linked-reason').value = '';
   document.getElementById('linked-type').value = 'bank_transfer';
-  document.getElementById('linked-amount').value = '';
-  document.getElementById('linked-date').value = '';
+  document.getElementById('linked-amount1').value = '';
+  document.getElementById('linked-amount2').value = '';
+  document.getElementById('linked-date1').value = '';
+  document.getElementById('linked-date2').value = '';
 
   // Set current month
   const now = new Date();
@@ -242,8 +244,10 @@ window.editLinkedTransaction = async function(id) {
       document.getElementById('linked-tx2').value = link.transaction_id_2;
     }
 
-    document.getElementById('linked-amount').value = formatAmount(link.amount);
-    document.getElementById('linked-date').value = link.transaction_date;
+    // Trigger the change handlers to populate amount/date fields
+    onTransaction1Change();
+    onTransaction2Change();
+
     document.getElementById('linked-reason').value = link.link_reason || '';
     document.getElementById('linked-type').value = link.link_type || 'bank_transfer';
 
@@ -348,14 +352,30 @@ window.onTransaction1Change = function() {
   const selectedOption = select.options[select.selectedIndex];
 
   if (selectedOption && selectedOption.value) {
-    document.getElementById('linked-amount').value = formatAmount(Math.abs(parseInt(selectedOption.dataset.amount)));
-    document.getElementById('linked-date').value = selectedOption.dataset.date;
+    const amount = parseInt(selectedOption.dataset.amount);
+    const sign = amount >= 0 ? '+' : '';
+    document.getElementById('linked-amount1').value = sign + formatAmount(amount);
+    document.getElementById('linked-date1').value = selectedOption.dataset.date;
+  } else {
+    document.getElementById('linked-amount1').value = '';
+    document.getElementById('linked-date1').value = '';
   }
 };
 
-// When transaction 2 is selected (optional additional logic)
+// When transaction 2 is selected, auto-fill amount and date
 window.onTransaction2Change = function() {
-  // Could add validation that amounts match, etc.
+  const select = document.getElementById('linked-tx2');
+  const selectedOption = select.options[select.selectedIndex];
+
+  if (selectedOption && selectedOption.value) {
+    const amount = parseInt(selectedOption.dataset.amount);
+    const sign = amount >= 0 ? '+' : '';
+    document.getElementById('linked-amount2').value = sign + formatAmount(amount);
+    document.getElementById('linked-date2').value = selectedOption.dataset.date;
+  } else {
+    document.getElementById('linked-amount2').value = '';
+    document.getElementById('linked-date2').value = '';
+  }
 };
 
 // Save linked transaction form
@@ -380,10 +400,9 @@ document.getElementById('linked-form').addEventListener('submit', async (e) => {
   }
 
   const tx1 = currentTransactions.account_1.find(t => t.id === txId1);
-  const tx2 = currentTransactions.account_2.find(t => t.id === txId2);
 
-  const amount = Math.abs(tx1 ? tx1.amount : parseInt(document.getElementById('linked-amount').value.replace(/,/g, '')) * 1000);
-  const date = tx1 ? tx1.date : document.getElementById('linked-date').value;
+  const amount = Math.abs(tx1 ? tx1.amount : 0);
+  const date = tx1 ? tx1.date : document.getElementById('linked-date1').value;
   const reason = document.getElementById('linked-reason').value.trim();
   const type = document.getElementById('linked-type').value;
 
