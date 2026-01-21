@@ -4,6 +4,8 @@ let accessToken = null;
 let budgets = [];
 let accountsCache = {};
 let deleteCallback = null;
+let companyLoanAccounts = [];
+let currentTransactions = { account_1: [], account_2: [] };
 
 // Initialize Supabase
 async function initSupabase() {
@@ -145,6 +147,7 @@ async function loadLinkedTransactions() {
         <td><span class="auto-matched ${link.is_auto_matched ? 'yes' : 'no'}">${link.is_auto_matched ? 'Auto' : 'Manual'}</span></td>
         <td style="max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${link.link_reason || ''}">${link.link_reason || '-'}</td>
         <td>
+          <button class="btn-edit" onclick="editLinkedTransaction('${link.id}')">Edit</button>
           <button class="btn-delete" onclick="deleteLinkedTransaction('${link.id}')">Unlink</button>
         </td>
       `;
@@ -175,6 +178,248 @@ window.deleteLinkedTransaction = function(id) {
   };
   document.getElementById('delete-modal').style.display = 'flex';
 };
+
+// Open modal for new linked transaction
+window.openLinkedModal = async function() {
+  document.getElementById('linked-modal-title').textContent = 'Add Linked Transaction';
+  document.getElementById('linked-id').value = '';
+  document.getElementById('linked-reason').value = '';
+  document.getElementById('linked-type').value = 'bank_transfer';
+  document.getElementById('linked-amount').value = '';
+  document.getElementById('linked-date').value = '';
+
+  // Set current month
+  const now = new Date();
+  document.getElementById('linked-month').value = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+
+  // Reset transaction selects
+  document.getElementById('linked-tx1').innerHTML = '<option value="">Select transaction...</option>';
+  document.getElementById('linked-tx2').innerHTML = '<option value="">Select transaction...</option>';
+  currentTransactions = { account_1: [], account_2: [] };
+
+  await populateLoanAccountSelect();
+
+  document.getElementById('linked-modal').style.display = 'flex';
+};
+
+// Close linked modal
+window.closeLinkedModal = function() {
+  document.getElementById('linked-modal').style.display = 'none';
+};
+
+// Edit existing linked transaction
+window.editLinkedTransaction = async function(id) {
+  try {
+    const result = await apiCall('/api/linked-transactions');
+    const link = result.data.find(l => l.id === id);
+    if (!link) throw new Error('Linked transaction not found');
+
+    document.getElementById('linked-modal-title').textContent = 'Edit Linked Transaction';
+    document.getElementById('linked-id').value = id;
+
+    await populateLoanAccountSelect();
+
+    // Find matching loan account
+    const loanAccount = companyLoanAccounts.find(a =>
+      (a.budget_id_1 === link.budget_id_1 && a.budget_id_2 === link.budget_id_2) ||
+      (a.budget_id_1 === link.budget_id_2 && a.budget_id_2 === link.budget_id_1)
+    );
+
+    if (loanAccount) {
+      document.getElementById('linked-loan-account').value = loanAccount.id;
+    }
+
+    // Set month from transaction date
+    const txDate = new Date(link.transaction_date);
+    document.getElementById('linked-month').value = `${txDate.getFullYear()}-${String(txDate.getMonth() + 1).padStart(2, '0')}`;
+
+    // Load transactions for this month
+    if (loanAccount) {
+      await loadTransactionsForMonth();
+
+      // Set selected transactions
+      document.getElementById('linked-tx1').value = link.transaction_id_1;
+      document.getElementById('linked-tx2').value = link.transaction_id_2;
+    }
+
+    document.getElementById('linked-amount').value = formatAmount(link.amount);
+    document.getElementById('linked-date').value = link.transaction_date;
+    document.getElementById('linked-reason').value = link.link_reason || '';
+    document.getElementById('linked-type').value = link.link_type || 'bank_transfer';
+
+    document.getElementById('linked-modal').style.display = 'flex';
+  } catch (err) {
+    alert(`Error: ${err.message}`);
+  }
+};
+
+// Populate loan account select
+async function populateLoanAccountSelect() {
+  try {
+    const result = await apiCall('/api/company-loan-accounts');
+    companyLoanAccounts = result.data || [];
+
+    const select = document.getElementById('linked-loan-account');
+    select.innerHTML = '<option value="">Select loan account pair...</option>';
+
+    companyLoanAccounts.forEach(account => {
+      const option = document.createElement('option');
+      option.value = account.id;
+      option.textContent = `${account.budget_name_1} ↔ ${account.budget_name_2} (${account.currency})`;
+      select.appendChild(option);
+    });
+  } catch (err) {
+    console.error('Error loading loan accounts:', err);
+  }
+}
+
+// When loan account changes, update labels
+window.onLoanAccountChange = function() {
+  const loanAccountId = document.getElementById('linked-loan-account').value;
+  const loanAccount = companyLoanAccounts.find(a => a.id === loanAccountId);
+
+  if (loanAccount) {
+    document.getElementById('linked-tx1-label').textContent = `${loanAccount.budget_name_1} - ${loanAccount.account_name_1}`;
+    document.getElementById('linked-tx2-label').textContent = `${loanAccount.budget_name_2} - ${loanAccount.account_name_2}`;
+  } else {
+    document.getElementById('linked-tx1-label').textContent = 'Transaction 1';
+    document.getElementById('linked-tx2-label').textContent = 'Transaction 2';
+  }
+
+  // Reset and reload transactions
+  document.getElementById('linked-tx1').innerHTML = '<option value="">Select transaction...</option>';
+  document.getElementById('linked-tx2').innerHTML = '<option value="">Select transaction...</option>';
+  currentTransactions = { account_1: [], account_2: [] };
+
+  if (loanAccountId && document.getElementById('linked-month').value) {
+    loadTransactionsForMonth();
+  }
+};
+
+// Load transactions for selected month
+window.loadTransactionsForMonth = async function() {
+  const loanAccountId = document.getElementById('linked-loan-account').value;
+  const month = document.getElementById('linked-month').value;
+
+  if (!loanAccountId || !month) return;
+
+  const loading = document.getElementById('transactions-loading');
+  loading.style.display = 'block';
+
+  try {
+    const result = await apiCall(`/api/loan-account-transactions?loan_account_id=${loanAccountId}&month=${month}`);
+    currentTransactions = {
+      account_1: result.data.account_1.transactions,
+      account_2: result.data.account_2.transactions
+    };
+
+    // Populate transaction selects
+    populateTransactionSelect('linked-tx1', currentTransactions.account_1);
+    populateTransactionSelect('linked-tx2', currentTransactions.account_2);
+
+    loading.style.display = 'none';
+  } catch (err) {
+    console.error('Error loading transactions:', err);
+    loading.style.display = 'none';
+    alert(`Error loading transactions: ${err.message}`);
+  }
+};
+
+// Populate transaction select with options
+function populateTransactionSelect(selectId, transactions) {
+  const select = document.getElementById(selectId);
+  select.innerHTML = '<option value="">Select transaction...</option>';
+
+  transactions.forEach(tx => {
+    const option = document.createElement('option');
+    option.value = tx.id;
+    const amount = formatAmount(tx.amount);
+    const sign = tx.amount >= 0 ? '+' : '';
+    option.textContent = `${tx.date} | ${sign}${amount} | ${tx.payee_name || tx.memo || 'No payee'}`;
+    option.dataset.amount = tx.amount;
+    option.dataset.date = tx.date;
+    select.appendChild(option);
+  });
+}
+
+// When transaction 1 is selected, auto-fill amount and date
+window.onTransaction1Change = function() {
+  const select = document.getElementById('linked-tx1');
+  const selectedOption = select.options[select.selectedIndex];
+
+  if (selectedOption && selectedOption.value) {
+    document.getElementById('linked-amount').value = formatAmount(Math.abs(parseInt(selectedOption.dataset.amount)));
+    document.getElementById('linked-date').value = selectedOption.dataset.date;
+  }
+};
+
+// When transaction 2 is selected (optional additional logic)
+window.onTransaction2Change = function() {
+  // Could add validation that amounts match, etc.
+};
+
+// Save linked transaction form
+document.getElementById('linked-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+
+  const id = document.getElementById('linked-id').value;
+  const loanAccountId = document.getElementById('linked-loan-account').value;
+  const loanAccount = companyLoanAccounts.find(a => a.id === loanAccountId);
+
+  if (!loanAccount) {
+    alert('Please select a loan account pair');
+    return;
+  }
+
+  const txId1 = document.getElementById('linked-tx1').value;
+  const txId2 = document.getElementById('linked-tx2').value;
+
+  if (!txId1 || !txId2) {
+    alert('Please select both transactions');
+    return;
+  }
+
+  const tx1 = currentTransactions.account_1.find(t => t.id === txId1);
+  const tx2 = currentTransactions.account_2.find(t => t.id === txId2);
+
+  const amount = Math.abs(tx1 ? tx1.amount : parseInt(document.getElementById('linked-amount').value.replace(/,/g, '')) * 1000);
+  const date = tx1 ? tx1.date : document.getElementById('linked-date').value;
+  const reason = document.getElementById('linked-reason').value.trim();
+  const type = document.getElementById('linked-type').value;
+
+  try {
+    const payload = {
+      budget_id_1: loanAccount.budget_id_1,
+      account_id_1: loanAccount.account_id_1,
+      transaction_id_1: txId1,
+      budget_id_2: loanAccount.budget_id_2,
+      account_id_2: loanAccount.account_id_2,
+      transaction_id_2: txId2,
+      amount: amount,
+      transaction_date: date,
+      link_reason: reason || `Manual link: ${loanAccount.budget_name_1} ↔ ${loanAccount.budget_name_2}`,
+      link_type: type,
+      is_auto_matched: false
+    };
+
+    if (id) {
+      await apiCall(`/api/linked-transactions/${id}`, {
+        method: 'PUT',
+        body: JSON.stringify(payload)
+      });
+    } else {
+      await apiCall('/api/linked-transactions', {
+        method: 'POST',
+        body: JSON.stringify(payload)
+      });
+    }
+
+    closeLinkedModal();
+    loadLinkedTransactions();
+  } catch (err) {
+    alert(`Error: ${err.message}`);
+  }
+});
 
 // ==================== LOAN ACCOUNTS ====================
 

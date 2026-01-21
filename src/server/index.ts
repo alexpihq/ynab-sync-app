@@ -556,8 +556,8 @@ app.post('/api/linked-transactions', requireAuth, async (req, res) => {
       is_auto_matched
     } = req.body;
 
-    if (!budget_id_1 || !transaction_id_1 || !account_id_1 ||
-        !budget_id_2 || !transaction_id_2 || !account_id_2 ||
+    if (!budget_id_1 || !transaction_id_1 ||
+        !budget_id_2 || !transaction_id_2 ||
         amount === undefined || !transaction_date) {
       return res.status(400).json({
         success: false,
@@ -568,10 +568,10 @@ app.post('/api/linked-transactions', requireAuth, async (req, res) => {
     const transaction = await supabase.createLinkedTransaction({
       budget_id_1,
       transaction_id_1,
-      account_id_1,
+      account_id_1: account_id_1 || null,
       budget_id_2,
       transaction_id_2,
-      account_id_2,
+      account_id_2: account_id_2 || null,
       amount,
       transaction_date,
       link_type: link_type || 'manual',
@@ -796,6 +796,64 @@ app.delete('/api/company-loan-accounts/:id', requireAuth, async (req, res) => {
     res.json({ success: true });
   } catch (error: any) {
     logger.error('Error deleting company loan account:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Get transactions from loan accounts for a given month
+app.get('/api/loan-account-transactions', requireAuth, async (req, res) => {
+  try {
+    const { loan_account_id, month } = req.query;
+
+    if (!loan_account_id || !month) {
+      return res.status(400).json({
+        success: false,
+        error: 'Missing required parameters: loan_account_id, month (YYYY-MM)'
+      });
+    }
+
+    // Get the company loan account
+    const loanAccounts = await supabase.getAllCompanyLoanAccounts();
+    const loanAccount = loanAccounts.find(a => a.id === loan_account_id);
+
+    if (!loanAccount) {
+      return res.status(404).json({ success: false, error: 'Loan account not found' });
+    }
+
+    // Calculate date range for the month
+    const [year, monthNum] = (month as string).split('-').map(Number);
+    const startDate = `${year}-${String(monthNum).padStart(2, '0')}-01`;
+    const endDate = monthNum === 12
+      ? `${year + 1}-01-01`
+      : `${year}-${String(monthNum + 1).padStart(2, '0')}-01`;
+
+    // Fetch transactions from both accounts
+    const [transactions1, transactions2] = await Promise.all([
+      ynab.getTransactionsByDateRange(loanAccount.budget_id_1, loanAccount.account_id_1, startDate, endDate),
+      ynab.getTransactionsByDateRange(loanAccount.budget_id_2, loanAccount.account_id_2, startDate, endDate)
+    ]);
+
+    res.json({
+      success: true,
+      data: {
+        account_1: {
+          budget_id: loanAccount.budget_id_1,
+          budget_name: loanAccount.budget_name_1,
+          account_id: loanAccount.account_id_1,
+          account_name: loanAccount.account_name_1,
+          transactions: transactions1
+        },
+        account_2: {
+          budget_id: loanAccount.budget_id_2,
+          budget_name: loanAccount.budget_name_2,
+          account_id: loanAccount.account_id_2,
+          account_name: loanAccount.account_name_2,
+          transactions: transactions2
+        }
+      }
+    });
+  } catch (error: any) {
+    logger.error('Error fetching loan account transactions:', error);
     res.status(500).json({ success: false, error: error.message });
   }
 });

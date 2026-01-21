@@ -83,13 +83,27 @@ class YnabService {
     sinceDate?: string
   ): Promise<YnabTransactionDetail[]> {
     let endpoint = `/budgets/${budgetId}/accounts/${accountId}/transactions`;
-    
+
     if (sinceDate) {
       endpoint += `?since_date=${sinceDate}`;
     }
 
     const response = await this.fetch<YnabTransactionsResponse>(endpoint);
     return response.data.transactions;
+  }
+
+  // ===== Get Transactions By Date Range =====
+  async getTransactionsByDateRange(
+    budgetId: string,
+    accountId: string,
+    startDate: string,
+    endDate: string
+  ): Promise<YnabTransactionDetail[]> {
+    const endpoint = `/budgets/${budgetId}/accounts/${accountId}/transactions?since_date=${startDate}`;
+    const response = await this.fetch<YnabTransactionsResponse>(endpoint);
+
+    // Filter by end date (YNAB API only supports since_date)
+    return response.data.transactions.filter(tx => tx.date < endDate);
   }
 
   // ===== Create Transaction =====

@@ -27,8 +27,11 @@
       <div id="tab-linked" class="tab-content active">
         <div class="linked-card">
           <div class="linked-header">
-            <h2>Matched Bank Transfers</h2>
-            <p style="color: #666; font-size: 14px;">These transactions are linked and won't create duplicate mirrors</p>
+            <div>
+              <h2>Matched Bank Transfers</h2>
+              <p style="color: #666; font-size: 14px; margin-top: 5px;">These transactions are linked and won't create duplicate mirrors</p>
+            </div>
+            <button id="add-linked-btn" class="sync-btn" onclick="openLinkedModal()">+ Add Link</button>
           </div>
 
           <div id="linked-loading" class="loading">Loading linked transactions...</div>
@@ -236,6 +239,78 @@
         </div>
         <div class="modal-actions">
           <button type="button" class="btn-secondary" onclick="closeCompanyLoanModal()">Cancel</button>
+          <button type="submit" class="btn-primary">Save</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Add/Edit Linked Transaction Modal -->
+  <div id="linked-modal" class="modal" style="display: none;">
+    <div class="modal-content modal-wide">
+      <div class="modal-header">
+        <h2 id="linked-modal-title">Add Linked Transaction</h2>
+        <button class="modal-close" onclick="closeLinkedModal()">&times;</button>
+      </div>
+      <form id="linked-form">
+        <input type="hidden" id="linked-id">
+
+        <div class="form-row">
+          <div class="form-group">
+            <label for="linked-loan-account">Loan Account Pair</label>
+            <select id="linked-loan-account" required onchange="onLoanAccountChange()">
+              <option value="">Select loan account pair...</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label for="linked-month">Month</label>
+            <input type="month" id="linked-month" required onchange="loadTransactionsForMonth()">
+          </div>
+        </div>
+
+        <div id="transactions-loading" class="loading" style="display: none;">Loading transactions...</div>
+
+        <div class="form-row">
+          <div class="form-group">
+            <label id="linked-tx1-label">Transaction 1</label>
+            <select id="linked-tx1" required onchange="onTransaction1Change()">
+              <option value="">Select transaction...</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label id="linked-tx2-label">Transaction 2</label>
+            <select id="linked-tx2" required onchange="onTransaction2Change()">
+              <option value="">Select transaction...</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="form-row">
+          <div class="form-group">
+            <label for="linked-amount">Amount</label>
+            <input type="text" id="linked-amount" readonly style="background: #f5f5f5;">
+          </div>
+          <div class="form-group">
+            <label for="linked-date">Transaction Date</label>
+            <input type="text" id="linked-date" readonly style="background: #f5f5f5;">
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label for="linked-reason">Link Reason</label>
+          <input type="text" id="linked-reason" placeholder="e.g. Bank transfer between Epic Web3 and Innerly">
+        </div>
+
+        <div class="form-group">
+          <label for="linked-type">Link Type</label>
+          <select id="linked-type">
+            <option value="bank_transfer">Bank Transfer</option>
+            <option value="manual">Manual Link</option>
+          </select>
+        </div>
+
+        <div class="modal-actions">
+          <button type="button" class="btn-secondary" onclick="closeLinkedModal()">Cancel</button>
           <button type="submit" class="btn-primary">Save</button>
         </div>
       </form>
