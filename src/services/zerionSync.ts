@@ -127,8 +127,14 @@ class ZerionSyncService {
         if (result === 'created') created++;
         else if (result === 'skipped') skipped++;
       } catch (error: any) {
-        logger.error(`❌ Error processing transaction ${tx.hash}:`, error.message);
-        errors++;
+        // 409 = transaction already exists, treat as skipped
+        if (error.message?.includes('409')) {
+          logger.info(`⏭️ Transaction ${tx.hash.slice(0, 10)}... already exists (409), skipping`);
+          skipped++;
+        } else {
+          logger.error(`❌ Error processing transaction ${tx.hash}:`, error.message);
+          errors++;
+        }
       }
     }
 

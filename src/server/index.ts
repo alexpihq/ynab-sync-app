@@ -1195,6 +1195,97 @@ function getNextMidnightUTC(): Date {
   return tomorrow;
 }
 
+// Helper to calculate next hour UTC
+function getNextHourUTC(): Date {
+  const now = new Date();
+  const nextHour = new Date(now);
+  nextHour.setUTCHours(nextHour.getUTCHours() + 1, 0, 0, 0);
+  return nextHour;
+}
+
+// Hourly sync for YNAB ↔ YNAB and Currency Conversion
+async function runHourlySync() {
+  if (syncState.isRunning) {
+    logger.warn('Sync already running, skipping hourly sync...');
+    return;
+  }
+
+  syncState.isRunning = true;
+  const startTime = Date.now();
+
+  try {
+    logger.info('⏰ Starting hourly sync (YNAB + Conversion)...');
+
+    const results: any = {};
+
+    // YNAB ↔ YNAB
+    try {
+      logger.info('📊 YNAB synchronization...');
+      const ynabResult = await syncService.runSyncCycle();
+      results.ynab = ynabResult;
+    } catch (error) {
+      logger.error('YNAB sync failed:', error);
+      results.ynab = { error: String(error) };
+    }
+
+    // Currency Conversion
+    try {
+      logger.info('💱 Currency conversion synchronization...');
+      const conversionResult = await syncConversionAccounts();
+      results.conversion = conversionResult;
+    } catch (error) {
+      logger.error('Currency conversion sync failed:', error);
+      results.conversion = { error: String(error) };
+    }
+
+    const duration = Date.now() - startTime;
+
+    syncState.lastRun = new Date();
+    syncState.lastResult = {
+      success: true,
+      message: 'Hourly sync completed (YNAB + Conversion)',
+      ...results
+    };
+
+    syncState.history.unshift({
+      timestamp: new Date(),
+      success: true,
+      message: 'Hourly sync completed (YNAB + Conversion)',
+      duration
+    });
+
+    if (syncState.history.length > 50) {
+      syncState.history = syncState.history.slice(0, 50);
+    }
+
+    logger.info(`✅ Hourly sync completed in ${duration}ms`);
+
+  } catch (error) {
+    const duration = Date.now() - startTime;
+    logger.error('Hourly sync failed:', error);
+
+    syncState.lastRun = new Date();
+    syncState.lastResult = {
+      success: false,
+      message: String(error)
+    };
+
+    syncState.history.unshift({
+      timestamp: new Date(),
+      success: false,
+      message: `Hourly sync failed: ${String(error)}`,
+      duration
+    });
+
+    if (syncState.history.length > 50) {
+      syncState.history = syncState.history.slice(0, 50);
+    }
+
+  } finally {
+    syncState.isRunning = false;
+  }
+}
+
 // Schedule automatic sync once per day at midnight UTC
 // Runs daily since the app is on paid Render plan (no sleep)
 cron.schedule('0 0 * * *', () => {
@@ -1202,11 +1293,19 @@ cron.schedule('0 0 * * *', () => {
   runFullSync();
 });
 
+// Schedule hourly sync for YNAB ↔ YNAB and Currency Conversion
+// Runs every hour at minute 0 (except midnight when full sync runs)
+cron.schedule('0 1-23 * * *', () => {
+  logger.info('⏰ Scheduled hourly sync triggered (YNAB + Conversion)');
+  runHourlySync();
+});
+
 // Start server
 app.listen(PORT, () => {
   logger.info(`🚀 Server running on http://localhost:${PORT}`);
-  logger.info(`⏰ Automatic sync: Enabled (daily at 00:00 UTC)`);
-  logger.info(`   Next sync: ${getNextMidnightUTC().toISOString()}`);
+  logger.info(`⏰ Automatic sync schedules:`);
+  logger.info(`   📅 Full sync: daily at 00:00 UTC → ${getNextMidnightUTC().toISOString()}`);
+  logger.info(`   🔄 Hourly sync (YNAB + Conversion): every hour at :00 → ${getNextHourUTC().toISOString()}`);
   logger.info(`   Alternative: External cron → POST /api/cron/sync?secret=YOUR_SECRET`);
   logger.info(`🔐 Authentication: Supabase Auth`);
   logger.info(`📋 Health check: GET /api/health`);
