@@ -9,6 +9,7 @@ import {
   TransactionMapping,
   SyncState,
   SyncLogEntry,
+  WalletMappingDB,
 } from '../types/index.js';
 
 class SupabaseService {
@@ -1278,6 +1279,86 @@ class SupabaseService {
     }
 
     return data;
+  }
+
+  // ===== Wallet Mappings CRUD =====
+  async getAllWalletMappings(): Promise<WalletMappingDB[]> {
+    const { data, error } = await this.client
+      .from('wallet_mappings')
+      .select('*')
+      .order('budget_name', { ascending: true });
+
+    if (error) {
+      logger.error('Error fetching wallet mappings:', error);
+      return [];
+    }
+
+    return data || [];
+  }
+
+  async getActiveWalletMappings(): Promise<WalletMappingDB[]> {
+    const { data, error } = await this.client
+      .from('wallet_mappings')
+      .select('*')
+      .eq('is_active', true)
+      .order('budget_name', { ascending: true });
+
+    if (error) {
+      logger.error('Error fetching active wallet mappings:', error);
+      return [];
+    }
+
+    return data || [];
+  }
+
+  async createWalletMapping(
+    mapping: Omit<WalletMappingDB, 'id' | 'created_at' | 'updated_at'>
+  ): Promise<WalletMappingDB | null> {
+    const { data, error } = await this.client
+      .from('wallet_mappings')
+      .insert(mapping)
+      .select()
+      .single();
+
+    if (error) {
+      logger.error('Error creating wallet mapping:', error);
+      return null;
+    }
+
+    return data;
+  }
+
+  async updateWalletMapping(
+    id: string,
+    updates: Partial<Omit<WalletMappingDB, 'id' | 'created_at'>>
+  ): Promise<WalletMappingDB | null> {
+    const { data, error } = await this.client
+      .from('wallet_mappings')
+      .update({ ...updates, updated_at: new Date().toISOString() })
+      .eq('id', id)
+      .select()
+      .single();
+
+    if (error) {
+      logger.error('Error updating wallet mapping:', error);
+      return null;
+    }
+
+    return data;
+  }
+
+  async deleteWalletMapping(id: string): Promise<boolean> {
+    const { error } = await this.client
+      .from('wallet_mappings')
+      .delete()
+      .eq('id', id);
+
+    if (error) {
+      logger.error('Error deleting wallet mapping:', error);
+      return false;
+    }
+
+    return true;
   }
 }
 

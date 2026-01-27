@@ -858,6 +858,93 @@ app.get('/api/loan-account-transactions', requireAuth, async (req, res) => {
   }
 });
 
+// ===== Wallet Mappings endpoints (Zerion sync) =====
+app.get('/api/wallet-mappings', requireAuth, async (req, res) => {
+  try {
+    const mappings = await supabase.getAllWalletMappings();
+    res.json({ success: true, data: mappings });
+  } catch (error: any) {
+    logger.error('Error fetching wallet mappings:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+app.post('/api/wallet-mappings', requireAuth, async (req, res) => {
+  try {
+    const {
+      wallet_address,
+      wallet_name,
+      budget_id,
+      budget_name,
+      account_id,
+      account_name,
+      budget_currency,
+      is_active
+    } = req.body;
+
+    if (!wallet_address || !budget_id || !account_id) {
+      return res.status(400).json({
+        success: false,
+        error: 'Missing required fields: wallet_address, budget_id, account_id'
+      });
+    }
+
+    const mapping = await supabase.createWalletMapping({
+      wallet_address,
+      wallet_name: wallet_name || null,
+      budget_id,
+      budget_name: budget_name || '',
+      account_id,
+      account_name: account_name || null,
+      budget_currency: budget_currency || 'USD',
+      is_active: is_active !== false
+    });
+
+    if (!mapping) {
+      return res.status(500).json({ success: false, error: 'Failed to create wallet mapping' });
+    }
+
+    res.json({ success: true, data: mapping });
+  } catch (error: any) {
+    logger.error('Error creating wallet mapping:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+app.put('/api/wallet-mappings/:id', requireAuth, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const updates = req.body;
+
+    const mapping = await supabase.updateWalletMapping(id, updates);
+
+    if (!mapping) {
+      return res.status(500).json({ success: false, error: 'Failed to update wallet mapping' });
+    }
+
+    res.json({ success: true, data: mapping });
+  } catch (error: any) {
+    logger.error('Error updating wallet mapping:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+app.delete('/api/wallet-mappings/:id', requireAuth, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const success = await supabase.deleteWalletMapping(id);
+
+    if (!success) {
+      return res.status(500).json({ success: false, error: 'Failed to delete wallet mapping' });
+    }
+
+    res.json({ success: true });
+  } catch (error: any) {
+    logger.error('Error deleting wallet mapping:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
 // Sync functions
 async function runFullSync() {
   if (syncState.isRunning) {

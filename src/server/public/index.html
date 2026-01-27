@@ -67,9 +67,12 @@
           <button class="sync-btn secondary" onclick="runSync('tron')">
             ⛓️ Tron → YNAB
           </button>
-          <button class="sync-btn secondary" onclick="runSync('zerion')">
-            🔗 Zerion (Ethereum & Solana) → YNAB
-          </button>
+          <div class="btn-with-sublink">
+            <button class="sync-btn secondary" onclick="runSync('zerion')">
+              🔗 Zerion (Ethereum & Solana) → YNAB
+            </button>
+            <a href="/wallets.html" class="sub-link">🪙 Wallets</a>
+          </div>
           <button class="sync-btn secondary" onclick="runSync('tbank')">
             🏦 TBank → YNAB
           </button>

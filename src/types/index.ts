@@ -98,6 +98,21 @@ export interface CompanyLoanAccount {
   updated_at: string;
 }
 
+// Wallet mappings for Zerion sync
+export interface WalletMappingDB {
+  id: string;
+  wallet_address: string;
+  wallet_name: string | null;
+  budget_id: string;
+  budget_name: string;
+  account_id: string;
+  account_name: string | null;
+  budget_currency: 'USD' | 'EUR';
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
 // Linked transactions (two transactions representing the same money movement)
 export interface LinkedTransaction {
   id: string;
