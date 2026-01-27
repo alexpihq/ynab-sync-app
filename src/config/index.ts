@@ -45,6 +45,7 @@ export const config: AppConfig = {
   personalBudgetId: getEnvVar('PERSONAL_BUDGET_ID'),
   innerlyBudgetId: getEnvVar('INNERLY_BUDGET_ID'),
   vibeconBudgetId: getEnvVar('VIBECON_BUDGET_ID'),
+  epicWeb3BudgetId: getEnvVar('EPIC_WEB3_BUDGET_ID', false) || '9c2dd1ba-36c2-4cb9-9428-6882160a155a',
   
   // Sync configuration
   syncIntervalMinutes: parseInt(getEnvVar('SYNC_INTERVAL_MINUTES', false) || '5'),
@@ -72,10 +73,16 @@ export const BUDGETS = {
     type: 'company' as const,
     currency: 'USD' as const,
   },
+  EPIC_WEB3: {
+    id: config.epicWeb3BudgetId,
+    name: 'Epic Web3',
+    type: 'company' as const,
+    currency: 'USD' as const,
+  },
 } as const;
 
 // Список всех компаний для итерации
-export const COMPANIES = [BUDGETS.INNERLY, BUDGETS.VIBECON] as const;
+export const COMPANIES = [BUDGETS.INNERLY, BUDGETS.VIBECON, BUDGETS.EPIC_WEB3] as const;
 
 // API endpoints
 export const YNAB_API_BASE = 'https://api.ynab.com/v1';

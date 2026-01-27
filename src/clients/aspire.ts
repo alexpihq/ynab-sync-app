@@ -1,5 +1,6 @@
 import { config } from '../config/index.js';
 import { logger } from '../utils/logger.js';
+import { proxyFetch, isProxyConfigured } from '../utils/proxyFetch.js';
 
 export interface AspireTransaction {
   id: string;
@@ -69,7 +70,7 @@ class AspireService {
 
     try {
       logger.info('🔄 Getting new Aspire access token...');
-      const response = await fetch(`${this.apiBaseUrl}/login`, {
+      const response = await proxyFetch(`${this.apiBaseUrl}/login`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
@@ -79,7 +80,8 @@ class AspireService {
           client_id: config.aspireClientId,
           client_secret: config.aspireClientSecret
         }),
-        signal: AbortSignal.timeout(10000) // 10 second timeout
+        timeout: 10000,
+        useProxyOn403: true // Use QuotaGuard proxy on IP restriction error
       });
 
       if (!response.ok) {
@@ -88,14 +90,14 @@ class AspireService {
       }
 
       const data = await response.json();
-      
+
       // Кэшируем токен с учетом времени жизни
       const expiresIn = parseInt(data.expires_in) * 1000; // конвертируем в миллисекунды
       this.tokenCache = {
         access_token: data.access_token,
         expires_at: Date.now() + expiresIn - 60000 // вычитаем 1 минуту для безопасности
       };
-      
+
       logger.info(`✅ Aspire token cached, expires in ${Math.round(expiresIn/1000)}s`);
       return data.access_token;
     } catch (error: any) {
@@ -109,22 +111,23 @@ class AspireService {
    */
   private async fetchPage(accountId: string, startDate: string, page: number = 1): Promise<AspireResponse> {
     const accessToken = await this.getAccessToken();
-    
+
     const url = new URL(`${this.apiBaseUrl}/transactions`);
     url.searchParams.set('account_id', accountId);
     url.searchParams.set('start_date', startDate);
     url.searchParams.set('page', page.toString());
 
     logger.debug(`Fetching Aspire transactions page ${page} from: ${url.toString()}`);
-    
-    const response = await fetch(url.toString(), {
+
+    const response = await proxyFetch(url.toString(), {
       method: 'GET',
       headers: {
         'Authorization': `Bearer ${accessToken}`,
         'Content-Type': 'application/json',
         'Accept': 'application/json'
       },
-      signal: AbortSignal.timeout(60000) // 60 second timeout
+      timeout: 60000,
+      useProxyOn403: true // Use QuotaGuard proxy on IP restriction error
     });
 
     if (!response.ok) {

@@ -145,11 +145,15 @@ async function syncConversionAccount(
       // Форматируем новый memo
       const newMemo = formatMemoWithOriginal(tx.memo, originalAmount, account.source_currency);
 
+      logger.info(`Converting transaction ${tx.id}: original=${originalAmount}, converted=${convertedAmount}, memo="${newMemo}"`);
+
       // Обновляем транзакцию в YNAB
       const updated = await ynab.updateTransaction(account.budget_id, tx.id, {
         amount: convertedAmount,
         memo: newMemo,
       });
+
+      logger.info(`YNAB update result: ${updated ? `success, new amount=${updated.amount}` : 'failed'}`);
 
       if (updated) {
         result.converted++;

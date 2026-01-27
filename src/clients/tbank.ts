@@ -1,5 +1,6 @@
 import { config } from '../config/index.js';
 import { logger } from '../utils/logger.js';
+import { proxyFetch, isProxyConfigured } from '../utils/proxyFetch.js';
 
 export interface TbankBalance {
   balance: number;
@@ -125,14 +126,15 @@ class TbankService {
 
       logger.debug(`Fetching TBank accounts from: ${url.toString()}`);
 
-      const response = await fetch(url.toString(), {
+      const response = await proxyFetch(url.toString(), {
         method: 'GET',
         headers: {
           'Authorization': `Bearer ${this.token}`,
           'Content-Type': 'application/json',
           'Accept': 'application/json'
         },
-        signal: AbortSignal.timeout(30000) // 30 second timeout
+        timeout: 30000,
+        useProxyOn403: true // Use QuotaGuard proxy on IP whitelist error
       });
 
       if (!response.ok) {
@@ -180,14 +182,15 @@ class TbankService {
 
       logger.debug(`Fetching TBank statement from: ${url.toString()}`);
 
-      const response = await fetch(url.toString(), {
+      const response = await proxyFetch(url.toString(), {
         method: 'GET',
         headers: {
           'Authorization': `Bearer ${this.token}`,
           'Content-Type': 'application/json',
           'Accept': 'application/json'
         },
-        signal: AbortSignal.timeout(60000) // 60 second timeout
+        timeout: 60000,
+        useProxyOn403: true // Use QuotaGuard proxy on IP whitelist error
       });
 
       if (!response.ok) {

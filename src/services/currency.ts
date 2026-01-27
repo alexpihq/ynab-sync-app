@@ -58,7 +58,7 @@ export async function convertUsdToEur(
 
 /**
  * Конвертирует сумму из RUB в EUR
- * @param amountRub Сумма в RUB (milliunits)
+ * @param amountRub Сумма в RUB (milliunits, где 1000 = 1 RUB)
  * @param date Дата транзакции (YYYY-MM-DD)
  * @returns Сумма в EUR (milliunits) или null если курс не найден
  */
@@ -74,11 +74,11 @@ export async function convertRubToEur(
     return null;
   }
 
-  // amountRub в milliunits (копейки, 1/100 RUB)
-  // EUR milliunits = центы (1/1000 EUR)
-  // Соотношение: 1000/100 = 10, поэтому умножаем на 10
-  // Формула: (RUB копейки / rate) * 10 = EUR центы
-  const amountEur = Math.round((amountRub / rate) * 10);
+  // amountRub в milliunits (1000 = 1 RUB)
+  // rate = EUR/RUB (например, 94.36 означает 1 EUR = 94.36 RUB)
+  // EUR milliunits = RUB milliunits / rate
+  // Например: 5000000 RUB milliunits (5000 RUB) / 94.36 = 52997 EUR milliunits (52.99 EUR)
+  const amountEur = Math.round(amountRub / rate);
 
   logger.debug(`Currency conversion: ${amountRub} RUB milliunits -> ${amountEur} EUR milliunits (rate: ${rate})`);
 

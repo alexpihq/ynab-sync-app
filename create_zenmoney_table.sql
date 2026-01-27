@@ -46,3 +46,16 @@ COMMENT ON TABLE public.zenmoney_transaction_mappings IS 'Tracks Zenmoney to YNA
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
