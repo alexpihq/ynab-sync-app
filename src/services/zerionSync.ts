@@ -1,9 +1,10 @@
 import { logger } from '../utils/logger.js';
 import { ynab } from '../clients/ynab.js';
 import { zerion, ZerionParsedTransaction } from '../clients/zerion.js';
-import { WALLET_MAPPINGS, ALLOWED_CHAINS, LEGIT_ASSETS, WalletMapping } from '../config/walletMapping.js';
+import { ALLOWED_CHAINS, LEGIT_ASSETS, WalletMapping } from '../config/walletMapping.js';
 import { SyncResult } from '../types/index.js';
 import { convertUsdToEur } from './currency.js';
+import { supabase } from '../clients/supabase.js';
 import crypto from 'crypto';
 
 const SYNC_START_DATE = '2026-01-01';
@@ -31,16 +32,36 @@ class ZerionSyncService {
       return {};
     }
 
+    // Fetch active wallet mappings from database
+    const walletMappingsDB = await supabase.getActiveWalletMappings();
+
+    if (walletMappingsDB.length === 0) {
+      logger.warn('⚠️  No active wallet mappings found in database');
+      return {};
+    }
+
+    logger.info(`📋 Found ${walletMappingsDB.length} active wallet(s) to sync`);
+
     const results: Record<string, SyncResult> = {};
 
-    for (const mapping of WALLET_MAPPINGS) {
+    for (const dbMapping of walletMappingsDB) {
+      // Convert database mapping to WalletMapping format
+      const mapping: WalletMapping = {
+        walletAddress: dbMapping.wallet_address,
+        budgetId: dbMapping.budget_id,
+        accountId: dbMapping.account_id,
+        budgetName: dbMapping.budget_name,
+        budgetCurrency: dbMapping.budget_currency as 'USD' | 'EUR',
+        description: dbMapping.wallet_name || undefined
+      };
+
       const walletLabel = `${mapping.description || mapping.walletAddress.substring(0, 10)}...`;
       logger.info(`\n📍 Processing wallet: ${walletLabel}`);
 
       try {
         const result = await this.syncWallet(mapping);
         results[mapping.walletAddress] = result;
-        
+
         logger.info(
           `✅ ${walletLabel}: ` +
           `created=${result.created}, updated=${result.updated}, ` +
@@ -59,7 +80,7 @@ class ZerionSyncService {
       }
 
       // Add delay between wallet syncs to avoid rate limiting
-      if (WALLET_MAPPINGS.indexOf(mapping) < WALLET_MAPPINGS.length - 1) {
+      if (walletMappingsDB.indexOf(dbMapping) < walletMappingsDB.length - 1) {
         logger.debug(`⏸️  Waiting ${DELAY_BETWEEN_WALLETS}ms before next wallet...`);
         await new Promise(resolve => setTimeout(resolve, DELAY_BETWEEN_WALLETS));
       }
