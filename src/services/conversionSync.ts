@@ -57,14 +57,20 @@ async function convertAmount(
 
 /**
  * Проверяет, нужна ли конвертация для транзакции
- * Транзакция считается неконвертированной, если в memo нет паттерна "XXX EUR" или "XXX RUB"
+ * Транзакция считается уже конвертированной, если в memo есть паттерн с исходной валютой
+ * Например: "1400.00 EUR" или "-50.00 RUB | Payment description"
  */
 function needsConversion(memo: string | null | undefined, sourceCurrency: string): boolean {
   if (!memo) return true;
 
   // Проверяем наличие паттерна типа "123.45 EUR" или "-50.00 RUB"
-  const pattern = new RegExp(`-?\\d+(\\.\\d+)?\\s*${sourceCurrency}`, 'i');
-  return !pattern.test(memo);
+  // Паттерн должен быть в начале строки или после " | "
+  const patterns = [
+    new RegExp(`^-?\\d+(\\.\\d+)?\\s*${sourceCurrency}`, 'i'),  // В начале
+    new RegExp(`\\|\\s*-?\\d+(\\.\\d+)?\\s*${sourceCurrency}`, 'i')  // После разделителя
+  ];
+
+  return !patterns.some(pattern => pattern.test(memo));
 }
 
 /**
@@ -120,12 +126,16 @@ async function syncConversionAccount(
 
       // Пропускаем транзакции которые уже конвертированы
       if (!needsConversion(tx.memo, account.source_currency)) {
+        logger.debug(`Skipping already converted transaction ${tx.id}: memo="${tx.memo}"`);
         result.skipped++;
         continue;
       }
 
       // Сохраняем оригинальную сумму до конвертации
       const originalAmount = tx.amount;
+      const isTransfer = tx.transfer_account_id ? 'YES' : 'NO';
+
+      logger.info(`📝 Transaction ${tx.id}: amount=${originalAmount}, memo="${tx.memo || 'empty'}", transfer=${isTransfer}`);
 
       // Конвертируем сумму
       const convertedAmount = await convertAmount(
@@ -145,7 +155,7 @@ async function syncConversionAccount(
       // Форматируем новый memo
       const newMemo = formatMemoWithOriginal(tx.memo, originalAmount, account.source_currency);
 
-      logger.info(`Converting transaction ${tx.id}: original=${originalAmount}, converted=${convertedAmount}, memo="${newMemo}"`);
+      logger.info(`🔄 Converting: ${originalAmount} → ${convertedAmount}, new memo="${newMemo}"`);
 
       // Обновляем транзакцию в YNAB
       const updated = await ynab.updateTransaction(account.budget_id, tx.id, {
