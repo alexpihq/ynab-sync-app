@@ -4,6 +4,14 @@ import { logger } from '../utils/logger.js';
 interface ZerionTransfer {
   fungible_info?: {
     symbol?: string;
+    flags?: {
+      verified?: boolean;
+    };
+    implementations?: Array<{
+      chain_id?: string;
+      address?: string;
+      decimals?: number;
+    }>;
   };
   nft_info?: {
     name?: string;
@@ -176,10 +184,17 @@ class ZerionClient {
             const rawAsset = tr.fungible_info?.symbol || '';
             const asset = this.normalizeTokenSymbol(rawAsset);
             const isSpam = tr.nft_info?.flags?.is_spam || false;
+            const isVerified = tr.fungible_info?.flags?.verified === true;
 
             // Only allow legitimate assets
             if (!legitimateAssets.includes(asset)) continue;
             if (isSpam) continue;
+
+            // Reject unverified tokens (address poisoning protection)
+            if (!isVerified) {
+              logger.warn(`⚠️  Skipping unverified token "${rawAsset}" in tx ${(attrs.hash || '').substring(0, 16)}... (possible address poisoning)`);
+              continue;
+            }
 
             validTransfer = { ...tr, asset };
             break;
