@@ -4,6 +4,7 @@ import { syncService } from './services/sync.js';
 import { syncFinologToYnab } from './services/finologSync.js';
 import { syncAspireToYnab } from './services/aspireSync.js';
 import { syncTronToYnab } from './services/tronSync.js';
+import { syncGnosispayToYnab } from './services/gnosispaySync.js';
 import { logger } from './utils/logger.js';
 
 /**
@@ -27,7 +28,11 @@ async function syncOnce() {
     // 4. Tron Blockchain → YNAB Innerly синхронизация (односторонняя)
     logger.info('\n⛓️  Starting Tron Blockchain synchronization...\n');
     await syncTronToYnab();
-    
+
+    // 5. GnosisPay → YNAB Personal синхронизация (односторонняя)
+    logger.info('\n💳 Starting GnosisPay synchronization...\n');
+    await syncGnosispayToYnab();
+
     logger.info('\n✅ All syncs completed successfully!');
     process.exit(0);
   } catch (error) {

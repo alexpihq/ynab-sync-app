@@ -26,10 +26,12 @@
     "cors": "^2.8.5",
     "date-fns": "^3.2.0",
     "dotenv": "^16.4.1",
+    "ethers": "^6.16.0",
     "express": "^5.2.1",
     "express-session": "^1.18.2",
     "https-proxy-agent": "^7.0.6",
-    "node-cron": "^4.2.1"
+    "node-cron": "^4.2.1",
+    "siwe": "^3.0.0"
   },
   "devDependencies": {
     "@types/cors": "^2.8.19",

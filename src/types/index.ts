@@ -187,6 +187,7 @@ export interface AppConfig {
   tronWalletAddress: string; // Optional - for Tron USDT Innerly sync
   tronApiKey: string; // Optional - for Tron USDT Innerly sync
   zerionApiKey: string; // Optional - for Zerion crypto wallets sync
+  gnosispayPrivateKey: string; // Optional - for GnosisPay card transactions sync
   tbankToken: string;
   zenmoneyToken: string; // Optional - for TBank Business API access
   supabaseUrl: string;

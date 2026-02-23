@@ -13,6 +13,7 @@ import { syncTronToYnab } from '../services/tronSync.js';
 import { syncTbankToYnab } from '../services/tbankSync.js';
 import { syncZenmoneyToYnab } from '../services/zenmoneySync.js';
 import { zerionSyncService } from '../services/zerionSync.js';
+import { syncGnosispayToYnab } from '../services/gnosispaySync.js';
 import { syncConversionAccounts } from '../services/conversionSync.js';
 import { supabase } from '../clients/supabase.js';
 import { ynab } from '../clients/ynab.js';
@@ -251,7 +252,7 @@ app.post('/api/sync/run/:type', requireAuth, async (req, res) => {
     return res.status(409).json({ error: 'Sync already running' });
   }
 
-  if (!['ynab', 'finolog', 'aspire', 'tron', 'tbank', 'zenmoney', 'zerion', 'conversion'].includes(type)) {
+  if (!['ynab', 'finolog', 'aspire', 'tron', 'tbank', 'zenmoney', 'zerion', 'gnosispay', 'conversion'].includes(type)) {
     return res.status(400).json({ error: 'Invalid sync type' });
   }
 
@@ -1030,6 +1031,16 @@ async function runFullSync() {
       results.zerion = { error: String(error) };
     }
 
+    // GnosisPay → YNAB
+    try {
+      logger.info('💳 GnosisPay synchronization...');
+      const gnosispayResult = await syncGnosispayToYnab();
+      results.gnosispay = gnosispayResult;
+    } catch (error) {
+      logger.error('GnosisPay sync failed:', error);
+      results.gnosispay = { error: String(error) };
+    }
+
     // Currency Conversion
     try {
       logger.info('💱 Currency conversion synchronization...');
@@ -1124,6 +1135,9 @@ async function runSpecificSync(type: string) {
         break;
       case 'zerion':
         result = await zerionSyncService.syncAllWallets();
+        break;
+      case 'gnosispay':
+        result = await syncGnosispayToYnab();
         break;
       case 'conversion':
         result = await syncConversionAccounts();

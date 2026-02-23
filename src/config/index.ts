@@ -30,7 +30,10 @@ export const config: AppConfig = {
   
   // Zerion API (optional)
   zerionApiKey: getEnvVar('ZERION_API_KEY', false) || '',
-  
+
+  // GnosisPay (optional) - ETH private key for SIWE auth
+  gnosispayPrivateKey: getEnvVar('GNOSISPAY_PRIVATE_KEY', false) || '',
+
   // TBank Business API (optional)
   tbankToken: getEnvVar('TBANK_TOKEN', false) || '',
   
