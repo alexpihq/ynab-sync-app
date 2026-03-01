@@ -119,11 +119,7 @@ async function processTransaction(
     return 'skipped';
   }
 
-  // Skip pending transactions — they may change
-  if (tx.isPending) {
-    logger.debug(`⏭️  GnosisPay: skipping pending transaction ${tx.merchant.name}`);
-    return 'skipped';
-  }
+  // Pending transactions are imported as uncleared in YNAB
 
   // Parse billing amount (cents string → EUR)
   // billingAmount is in minor units (cents), e.g. "2550" = 25.50 EUR
@@ -146,10 +142,8 @@ async function processTransaction(
   }
   // Refunds are already positive
 
-  // Parse date
-  const date = tx.clearedAt
-    ? tx.clearedAt.split('T')[0]
-    : tx.createdAt.split('T')[0];
+  // Parse date — always use createdAt (actual purchase date)
+  const date = tx.createdAt.split('T')[0];
 
   if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
     logger.warn(`⚠️  GnosisPay: invalid date ${tx.createdAt}`);
@@ -178,7 +172,7 @@ async function processTransaction(
     amount: ynabAmount,
     payee_name: payeeName.substring(0, 100),
     memo: memo.substring(0, 500),
-    cleared: 'cleared',
+    cleared: tx.isPending ? 'uncleared' : 'cleared',
     approved: false,
     import_id: importId,
   });
