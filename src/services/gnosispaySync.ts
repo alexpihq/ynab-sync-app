@@ -119,9 +119,9 @@ async function processTransaction(
     return 'skipped';
   }
 
-  // Skip reversed/refunded transactions
-  if (tx.kind === 'Reversal') {
-    logger.debug(`⏭️  GnosisPay: skipping reversed transaction ${tx.merchant.name}`);
+  // Skip reversed/refunded and failed transactions
+  if (tx.kind === 'Reversal' || tx.status === 'Insufficient Funds') {
+    logger.debug(`⏭️  GnosisPay: skipping ${tx.kind}/${tx.status} transaction ${tx.merchant.name}`);
     return 'skipped';
   }
 
