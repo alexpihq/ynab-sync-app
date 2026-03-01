@@ -1,7 +1,7 @@
 import { ynab } from '../clients/ynab.js';
 import { supabase } from '../clients/supabase.js';
 import { logger } from '../utils/logger.js';
-import { convertEurToUsd, convertGbpToUsd, formatAmount } from './currency.js';
+import { convertEurToUsd, convertUsdToEur, convertGbpToUsd, formatAmount } from './currency.js';
 
 /**
  * Конфигурация аккаунта для конвертации валют
@@ -43,6 +43,11 @@ async function convertAmount(
   // EUR -> USD
   if (sourceCurrency === 'EUR' && targetCurrency === 'USD') {
     return await convertEurToUsd(amount, date);
+  }
+
+  // USD -> EUR
+  if (sourceCurrency === 'USD' && targetCurrency === 'EUR') {
+    return await convertUsdToEur(amount, date);
   }
 
   // GBP -> USD
@@ -220,8 +225,9 @@ export async function syncConversionAccounts(): Promise<{
 
     logger.info(`Found ${accounts.length} conversion account(s)`);
 
-    // Дата начала синхронизации - начало текущего месяца
+    // Дата начала синхронизации - начало предыдущего месяца (чтобы не терять транзакции на стыке месяцев)
     const now = new Date();
+    now.setMonth(now.getMonth() - 1);
     const sinceDate = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`;
 
     for (const account of accounts) {
