@@ -39,6 +39,11 @@ export const config: AppConfig = {
   
   // Zenmoney API (optional)
   zenmoneyToken: getEnvVar('ZENMONEY_TOKEN', false) || '',
+
+  // Airwallex API (optional)
+  airwallexApiKey: getEnvVar('AIRWALLEX_API_KEY', false) || '',
+  airwallexClientId: getEnvVar('AIRWALLEX_CLIENT_ID', false) || '',
+  airwallexAccountId: getEnvVar('AIRWALLEX_ACCOUNT_ID', false) || '',
   
   // Supabase
   supabaseUrl: getEnvVar('SUPABASE_URL'),

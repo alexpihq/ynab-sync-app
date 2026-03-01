@@ -1347,6 +1347,106 @@ class SupabaseService {
     return data;
   }
 
+  // ===== Airwallex Transaction Mappings =====
+  async createAirwallexMapping(
+    airwallexTransactionId: string,
+    airwallexTransactionType: string,
+    airwallexDatetime: string,
+    ynabBudgetId: string,
+    ynabAccountId: string,
+    ynabTransactionId: string,
+    airwallexAmount: number,
+    airwallexCurrency: string,
+    airwallexStatus: string,
+    airwallexDescription: string | null,
+  ): Promise<void> {
+    const { error } = await this.client
+      .from('airwallex_transaction_mappings')
+      .insert({
+        airwallex_transaction_id: airwallexTransactionId,
+        airwallex_transaction_type: airwallexTransactionType,
+        airwallex_datetime: airwallexDatetime,
+        ynab_budget_id: ynabBudgetId,
+        ynab_account_id: ynabAccountId,
+        ynab_transaction_id: ynabTransactionId,
+        airwallex_amount: airwallexAmount,
+        airwallex_currency: airwallexCurrency,
+        airwallex_status: airwallexStatus,
+        airwallex_description: airwallexDescription,
+        sync_status: 'active',
+      });
+
+    if (error) {
+      logger.error('Error creating Airwallex mapping:', error);
+    }
+  }
+
+  async getAirwallexMappings(): Promise<any[]> {
+    const { data, error } = await this.client
+      .from('airwallex_transaction_mappings')
+      .select('*')
+      .eq('sync_status', 'active');
+
+    if (error) {
+      logger.error('Error fetching Airwallex mappings:', error);
+      return [];
+    }
+
+    return data || [];
+  }
+
+  async getAirwallexMapping(airwallexTransactionId: string): Promise<any | null> {
+    const { data, error } = await this.client
+      .from('airwallex_transaction_mappings')
+      .select('*')
+      .eq('airwallex_transaction_id', airwallexTransactionId)
+      .eq('sync_status', 'active')
+      .single();
+
+    if (error) {
+      return null;
+    }
+
+    return data;
+  }
+
+  async updateAirwallexMappingStatus(
+    airwallexTransactionId: string,
+    status: string,
+  ): Promise<void> {
+    const { error } = await this.client
+      .from('airwallex_transaction_mappings')
+      .update({
+        sync_status: status,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('airwallex_transaction_id', airwallexTransactionId);
+
+    if (error) {
+      logger.error('Error updating Airwallex mapping status:', error);
+    }
+  }
+
+  async updateAirwallexMapping(
+    airwallexTransactionId: string,
+    updates: {
+      airwallex_amount?: number;
+      airwallex_status?: string;
+    },
+  ): Promise<void> {
+    const { error } = await this.client
+      .from('airwallex_transaction_mappings')
+      .update({
+        ...updates,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('airwallex_transaction_id', airwallexTransactionId);
+
+    if (error) {
+      logger.error('Error updating Airwallex mapping:', error);
+    }
+  }
+
   async deleteWalletMapping(id: string): Promise<boolean> {
     const { error } = await this.client
       .from('wallet_mappings')

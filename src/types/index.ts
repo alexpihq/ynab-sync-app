@@ -189,7 +189,10 @@ export interface AppConfig {
   zerionApiKey: string; // Optional - for Zerion crypto wallets sync
   gnosispayPrivateKey: string; // Optional - for GnosisPay card transactions sync
   tbankToken: string;
-  zenmoneyToken: string; // Optional - for TBank Business API access
+  zenmoneyToken: string; // Optional - for Zenmoney API access
+  airwallexApiKey: string; // Optional - for Airwallex API access
+  airwallexClientId: string; // Optional - for Airwallex API access
+  airwallexAccountId: string; // Optional - for Airwallex account-level access
   supabaseUrl: string;
   supabaseServiceKey: string;
   personalBudgetId: string;

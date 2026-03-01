@@ -274,7 +274,8 @@ function updateStatusUI(data) {
       { key: 'finolog', label: '💼 Finolog → YNAB', icon: '💼' },
       { key: 'aspire', label: '🏦 Aspire → YNAB', icon: '🏦' },
       { key: 'tron', label: '⛓️ Tron → YNAB', icon: '⛓️' },
-      { key: 'zerion', label: '🔗 Zerion (Ethereum & Solana) → YNAB', icon: '🔗' }
+      { key: 'zerion', label: '🔗 Zerion (Ethereum & Solana) → YNAB', icon: '🔗' },
+      { key: 'airwallex', label: '✈️ Airwallex → YNAB', icon: '✈️' }
     ];
     
     types.forEach(({ key, label, icon }) => {
