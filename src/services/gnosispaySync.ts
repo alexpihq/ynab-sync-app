@@ -119,6 +119,12 @@ async function processTransaction(
     return 'skipped';
   }
 
+  // Skip reversed/refunded transactions
+  if (tx.kind === 'Reversal') {
+    logger.debug(`⏭️  GnosisPay: skipping reversed transaction ${tx.merchant.name}`);
+    return 'skipped';
+  }
+
   // Pending transactions are imported as uncleared in YNAB
 
   // Parse billing amount (cents string → EUR)
